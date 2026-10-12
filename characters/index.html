@@ -1,0 +1,153 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Player models</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #a9afba; font: 13px/1.35 system-ui, sans-serif; overflow: hidden; }
+  #ui { position: absolute; top: 10px; left: 10px; background: rgba(20, 24, 32, .84); color: #eef; padding: 10px 12px; border-radius: 8px; width: 230px; }
+  #ui h3 { margin: 2px 0 8px; font-size: 14px; }
+  #ui label { display: flex; justify-content: space-between; align-items: center; margin: 5px 0; gap: 8px; }
+  #ui select { width: 120px; }
+  #ui .stats { margin-top: 8px; padding-top: 8px; border-top: 1px solid #ffffff22; white-space: pre; font: 12px/1.45 ui-monospace, monospace; color: #cfd6e6; }
+  #ui a { color: #9cc3ff; }
+  body.capture #ui { display: none; }
+</style>
+<script type="importmap">{"imports":{"three":"../vendor/three/three.module.js","three/addons/":"../vendor/three/addons/"}}</script>
+</head>
+<body>
+<div id="ui">
+  <h3>Player models</h3>
+  <label>Model <select id="model">
+    <option value="base">Base medium (GLB)</option>
+    <option value="both">Base vs. current boxes</option>
+  </select></label>
+  <label>Camera <select id="cam">
+    <option value="front">Front</option><option value="3q">3/4</option><option value="side">Side</option>
+    <option value="back">Back</option><option value="broadcast">Broadcast distance</option>
+  </select></label>
+  <label>Wireframe <input id="wire" type="checkbox"></label>
+  <label>Height ruler <input id="ruler" type="checkbox" checked></label>
+  <div class="stats" id="stats">loading…</div>
+  <div style="margin-top:8px"><a href="../">← back to the game</a></div>
+</div>
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { createPlayerRig } from '../src/engine/PlayerModel.js';
+import { resolveBody } from '../src/engine/Body.js';
+import { resolveKit } from '../src/engine/Uniforms.js';
+import { DEFAULT_TEAMS } from '../src/engine/Engine.js';
+
+const q = new URLSearchParams(location.search);
+if (q.has('capture')) document.body.classList.add('capture');
+const $ = id => document.getElementById(id);
+
+// --- scene: same matte look as the game, units = metres here -------------------
+const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.NeutralToneMapping;
+renderer.shadowMap.enabled = true;
+document.body.appendChild(renderer.domElement);
+const scene = new THREE.Scene();
+scene.background = new THREE.Color('#a9afba');
+scene.add(new THREE.HemisphereLight('#f4f7ff', '#8a8f98', 1.9));
+const sun = new THREE.DirectionalLight('#fffaf0', 2.2);
+sun.position.set(-3, 7, 6); sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048);
+Object.assign(sun.shadow.camera, { left: -3, right: 3, top: 3, bottom: -1 });
+scene.add(sun);
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(40, 40).rotateX(-Math.PI / 2), new THREE.MeshLambertMaterial({ color: '#b9bec8' }));
+ground.receiveShadow = true; scene.add(ground);
+const grid = new THREE.GridHelper(10, 20, '#8f96a3', '#a3a9b4'); grid.position.y = 0.001; scene.add(grid);
+
+const camera = new THREE.PerspectiveCamera(30, innerWidth / innerHeight, 0.05, 200);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.target.set(0, 0.95, 0);
+controls.enableDamping = true;
+
+// --- height ruler: tick every foot, label at 6'1" --------------------------------
+const ruler = new THREE.Group();
+{
+  const mat = new THREE.LineBasicMaterial({ color: '#2b3140' });
+  const pts = [new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, 2.13, 0)];
+  for (let ft = 0; ft <= 7; ft++) { const y = ft * 0.3048; pts.push(new THREE.Vector3(0, y, 0), new THREE.Vector3(0.06, y, 0)); }
+  ruler.add(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(pts), mat));
+  const ref = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, 1.854, 0), new THREE.Vector3(1.2, 1.854, 0)]),
+    new THREE.LineDashedMaterial({ color: '#c0392b', dashSize: 0.04, gapSize: 0.03 }));
+  ref.computeLineDistances(); ruler.add(ref);
+  ruler.position.set(-1.25, 0, 0);
+  scene.add(ruler);
+}
+
+// --- models -----------------------------------------------------------------------
+const gltf = await new GLTFLoader().loadAsync('./assets/base-medium.glb');
+const base = gltf.scene;
+let mesh;
+base.traverse(o => {
+  if (o.isMesh) {
+    mesh = o;
+    o.castShadow = true;
+    // flat-shaded matte, same settings the game uses
+    o.material = new THREE.MeshStandardMaterial({ map: o.material.map, flatShading: true, roughness: 0.95, metalness: 0 });
+  }
+});
+scene.add(base);
+const wire = new THREE.LineSegments(new THREE.WireframeGeometry(mesh.geometry), new THREE.LineBasicMaterial({ color: '#000', transparent: true, opacity: 0.35 }));
+mesh.add(wire);
+
+// current procedural box player at the same height (game units are yards → metres)
+const boxRig = createPlayerRig({ body: resolveBody({ seed: 7, position: 'QB', heightIn: 73, weightLb: 225 }), kit: resolveKit(DEFAULT_TEAMS.home), skin: '#c68b62', number: 12, name: 'Box' });
+boxRig.root.scale.setScalar(0.9144);
+boxRig.bones.shL.rotation.z = Math.PI / 2; boxRig.bones.shR.rotation.z = -Math.PI / 2;
+scene.add(boxRig.root);
+
+const box3 = new THREE.Box3().setFromObject(base);
+const size = box3.getSize(new THREE.Vector3());
+const tris = (mesh.geometry.index ? mesh.geometry.index.count : mesh.geometry.attributes.position.count) / 3;
+const tex = mesh.material.map?.image;
+
+function apply() {
+  const both = $('model').value === 'both';
+  base.position.x = both ? -1.0 : 0;
+  boxRig.root.position.x = 1.0;
+  boxRig.root.visible = both;
+  wire.visible = $('wire').checked;
+  ruler.visible = $('ruler').checked;
+  ruler.position.x = both ? -2.2 : -1.25;
+  const v = $('cam').value;
+  const d = v === 'broadcast' ? 28 : (both ? 7.5 : 5.2);
+  const a = { front: 0, '3q': 0.6, side: Math.PI / 2, back: Math.PI, broadcast: 0.25 }[v];
+  const h = v === 'broadcast' ? 12 : 1.25;
+  camera.position.set(Math.sin(a) * d, h, Math.cos(a) * d);
+  controls.target.set(0, 0.95, 0);
+  controls.update();
+}
+for (const id of ['cam', 'wire', 'ruler']) $(id).onchange = apply;
+$('model').onchange = () => { if ($('model').value === 'both') $('cam').value = 'front'; apply(); };
+if (q.get('model')) $('model').value = q.get('model');
+if (q.get('cam')) $('cam').value = q.get('cam');
+if (q.has('wire')) $('wire').checked = true;
+apply();
+
+function stats() {
+  const ft = size.y / 0.3048;
+  $('stats').textContent =
+    `triangles  ${tris}\n` +
+    `height     ${size.y.toFixed(3)} m (${Math.floor(ft)}'${Math.round((ft % 1) * 12)}")\n` +
+    `width      ${size.x.toFixed(2)} m (T-pose)\n` +
+    `depth      ${size.z.toFixed(2)} m\n` +
+    `feet at    y = ${box3.min.y.toFixed(3)}\n` +
+    `texture    ${tex ? tex.width + '×' + tex.height : 'none'}\n` +
+    `draw calls ${renderer.info.render.calls}`;
+}
+
+addEventListener('resize', () => { renderer.setSize(innerWidth, innerHeight); camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); });
+renderer.setAnimationLoop(() => { controls.update(); renderer.render(scene, camera); stats(); });
+window.__ready = true;
+</script>
+</body>
+</html>

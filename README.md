@@ -9,6 +9,7 @@ python3 -m http.server 8000   →  http://localhost:8000/
 ```
 * `?nosim` starts the engine with no demo driver (an empty field for your sim).
 * `lineup.html` previews generated players: the six test bodies, same-size seed variation, or a custom player with sliders. It runs the real animator (`pose=run|sprint|3pt|block|…`, `uniform=home|away|alt`, `cam=front|side|back|3q`).
+* `characters/` is the side project for the asset-based player pipeline (viewer at `/characters/`). See `characters/README.md`.
 * Keys: `1-4` camera modes, `Space` pause, `[` `]` slow-mo.
 
 ## Layout

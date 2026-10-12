@@ -18,6 +18,10 @@ Tackles, catches and blocking must be **physics-driven**, not canned animations.
 - `lineup.html` is the player preview / validation page. `?nosim` shows an empty field.
 - The Meshy/Blender pipeline was removed (it's in git history before the "procedural players" commit).
 
+- Side project: `characters/` (see `characters/README.md` and `characters/ARCHITECTURE.md`) is moving players to a
+  Blender-authored base mesh (`characters/source/med-base-low-poly.glb`). Milestone 1 (clean + export + viewer) is done;
+  the live game is unchanged until we pivot.
+
 ## Known issues / next steps
 1. Hand-tuned animations for specific moves on top of the procedural base (stances, tackles, catches, throws).
 2. Equipment variety (facemask styles, visors, sleeves) and uniform details (sleeve numbers, helmet logos, fonts).
