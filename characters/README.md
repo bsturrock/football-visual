@@ -21,7 +21,7 @@ python3 characters/tools/prep_base.py -- characters/source/med-base-low-poly.glb
 
 | Check | Result |
 |---|---|
-| Triangles | 1,416 (one connected mesh, exactly symmetric) |
+| Triangles | 1,420 (one connected mesh, exactly symmetric) |
 | Shading | flat, matte (metallic/roughness map removed) |
 | Colours | base-colour texture, 1024 px |
 | Pose | T-pose, exactly symmetric (mirrored) |
@@ -36,10 +36,9 @@ python3 characters/tools/prep_base.py -- characters/source/med-base-low-poly.glb
 
 ### Source fixes (scripted in `prep_base.py`)
 
-1. **Facemask:** the original cage is kept (an earlier flat-plate replacement was reverted). The small
-   triangular openings at the outer ends of the lower mask, where it joins the helmet, are closed
-   (tunnel walls removed, front/back capped) and the dark-painted faces there recoloured white.
-   The centre opening stays. 2 harmless edges shared by 4 faces remain.
+1. **Facemask:** geometry kept exactly as modelled. Faces at the outer ends of the lower mask (where it
+   joins the helmet) were painted dark in the texture and read as holes; they're recoloured white.
+   2 harmless edges shared by 4 faces remain.
 2. **Back of the neck:** faces painted dark grey are recoloured to skin (UVs point at a skin texel).
 3. **Symmetry:** the mesh is cut at x = 0 and the +X half (player's left, the cleaner side) is
    mirrored, so chest, pelvis, helmet and limbs are exactly symmetric. The centre cut adds ~190 triangles.

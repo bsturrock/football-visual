@@ -6,7 +6,7 @@ Milestone 1: clean the medium base player and export it for Three.js.
 
 The source file is never modified. Steps:
   - weld UV-seam vertex splits into one connected mesh (needed for skinning later)
-  - fix the source: close the small side openings of the lower facemask; back of neck -> skin
+  - fix the source: dark paint at the outer ends of the lower facemask -> white; back of neck -> skin
   - exact left/right symmetry: keep the +X half and mirror it (MIRROR_KEEP=-1 keeps -X)
   - consistent outward normals, flat shading
   - matte material: base colour only (drop the metallic/roughness map), texture <= 1024 px
@@ -70,20 +70,9 @@ def ref_uv(kind, where):
 
 SKIN_UV = ref_uv('skin', lambda c: 0.45 < c.z < 0.62 and c.y < 0 and abs(c.x) < 0.12)
 
-# 1. facemask: close the small triangular openings at the outer ends of the lower mask
-#    (where it joins the helmet) by removing the tunnel walls and capping front and back.
-#    Only the +X side is needed; the mirror step copies it.
+# 1. facemask: faces at the outer ends of the lower mask (where it joins the helmet) are painted
+#    dark in the texture and read as holes -> recolour white. Geometry is left as modelled.
 WHITE_UV = ref_uv('white', lambda c: c.z > 0.8)
-tunnel = [f for f in bm.faces
-          if 0.075 <= f.calc_center_median().x <= 0.15 and 0.60 <= f.calc_center_median().z <= 0.72
-          and -0.19 <= f.calc_center_median().y <= -0.10 and abs(f.normal.y) < 0.6]
-bmesh.ops.delete(bm, geom=tunnel, context='FACES_ONLY')
-bmesh.ops.delete(bm, geom=[v for v in bm.verts if not v.link_faces], context='VERTS')
-caps = bmesh.ops.holes_fill(bm, edges=[e for e in bm.edges if e.is_boundary], sides=0)['faces']
-caps = bmesh.ops.triangulate(bm, faces=caps)['faces']
-for f in caps:
-    for l in f.loops: l[uvl].uv = WHITE_UV
-# faces at the outer ends of the lower mask painted dark in the texture -> white
 mask_dark = [f for f in bm.faces
              if 0.07 <= f.calc_center_median().x <= 0.17 and 0.58 <= f.calc_center_median().z <= 0.74
              and -0.2 <= f.calc_center_median().y <= -0.05 and colour(f) == 'dark']
@@ -105,7 +94,7 @@ bmesh.ops.mirror(bm, geom=bm.verts[:] + bm.edges[:] + bm.faces[:], matrix=Matrix
 bmesh.ops.remove_doubles(bm, verts=bm.verts, dist=1e-4)
 bmesh.ops.triangulate(bm, faces=[f for f in bm.faces if len(f.verts) > 3])
 print(f'symmetry: kept {"+X" if KEEP > 0 else "-X"} half, mirrored')
-print(f'fixes: facemask side openings closed ({len(tunnel)} tunnel faces -> {len(caps)} caps, {len(mask_dark)} dark faces -> white); neck faces recoloured {len(neck)}')
+print(f'fixes: facemask dark faces -> white {len(mask_dark)}; neck faces recoloured {len(neck)}')
 bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
 for f in bm.faces:
     f.smooth = False
