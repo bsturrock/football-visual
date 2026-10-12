@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { createPlayerRig, disposeRig } from './PlayerModel.js';
+import { createGameRig } from './characters/gamePlayer.js';
 import { resolveBody, rng } from './Body.js';
 import { resolveKit } from './Uniforms.js';
 import { Animator } from './Animator.js';
@@ -94,7 +95,8 @@ export class Player {
 
     this._skin = o.skin || SKIN_TONES[(rand() * SKIN_TONES.length) | 0];
     this.kit = resolveKit(o.teamData, o.uniform);
-    this.rig = createPlayerRig({ body: this.body, kit: this.kit, skin: this._skin, number: this.number, name: this.name });
+    const build = engine.playerModel === 'classic' ? createPlayerRig : createGameRig;   // 'classic' = the previous code-built players
+    this.rig = build({ body: this.body, kit: this.kit, skin: this._skin, number: this.number, name: this.name });
     this.rig.root.userData.player = this;
     engine.scene.add(this.rig.root);
     this.anim = new Animator(this);
@@ -593,6 +595,7 @@ export class Player {
 
   dispose() {
     this.engine.scene.remove(this.rig.root);
+    this.rig.disposed = true;
     disposeRig(this.rig);
   }
 }

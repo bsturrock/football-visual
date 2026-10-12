@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/BufferGeometryUtils.js';
-import { PLAYER_MATERIAL, prep } from '../PlayerModel.js';
+import { PLAYER_MATERIAL, prep, numberDecalMaterial } from '../PlayerModel.js';
 import { loft, boxR, mx, mirrorSections } from './shapes.js';
 import { MEDIUM_BLUEPRINT as BP } from './mediumBlueprint.js';
 import { bodyMapper, jointRegion } from './bodyMapper.js';
@@ -136,7 +136,7 @@ const ARM = /^(sh|el|hand)([LR])$/;
  *  body  resolved body (Body.resolveBody); omitted = the measured medium player, unchanged
  *  kit   region colours; look: skin / hair / brows / eyes / mouth
  */
-export function createMediumPlayer({ body = null, face = DEFAULT_FACE, kit = MEDIUM_KIT, look = null } = {}) {
+export function createMediumPlayer({ body = null, face = DEFAULT_FACE, kit = MEDIUM_KIT, look = null, number = null, name = null } = {}) {
   look = { ...faceLook(face), ...(look || {}) };
   const M = bodyMapper(body);
   const J = {};
@@ -195,9 +195,10 @@ export function createMediumPlayer({ body = null, face = DEFAULT_FACE, kit = MED
     g.add(mesh);
     meshes.push(mesh);
   }
+  const decals = number != null ? addDecals(M, J, bones.chest, kit, number, name) : [];
   const L = J;
   return {
-    root, tilt, yaw, bones, meshes, hair, decals: [], body, face,
+    root, tilt, yaw, bones, meshes, hair, decals, body, face,
     units: 'metres',
     heightM: M.heightM,
     headScale: M.headScale,             // head size factor (helmet fit follows it)
@@ -206,6 +207,36 @@ export function createMediumPlayer({ body = null, face = DEFAULT_FACE, kit = MED
     trianglesByJoint: Object.fromEntries(meshes.map(m => [m.parent.name, m.geometry.attributes.position.count / 3])),
     triangles: meshes.reduce((n, m) => n + m.geometry.attributes.position.count / 3, 0),
   };
+}
+
+// chest front / back z at height y (blueprint 'chest' rings, measured): the decals lie on these slopes
+const CHEST_FRONT = [[1.13, 0.1029], [1.25, 0.1075], [1.33, 0.1216]];
+const CHEST_BACK = [[1.13, -0.1608], [1.25, -0.1816], [1.33, -0.1996]];
+const zOn = (keys, y) => { for (let i = 1; i < keys.length; i++) if (y <= keys[i][0]) { const [y0, z0] = keys[i - 1], [y1, z1] = keys[i]; return z0 + (z1 - z0) * (y - y0) / (y1 - y0); } return keys.at(-1)[1]; };
+
+/** Jersey number (front) and name + number (back) as decal planes lying on the reshaped chest. */
+function addDecals(M, J, chest, K, number, name) {
+  const mat = numberDecalMaterial(K, number, name);
+  const halfW = Math.abs(M.point(0.16, 1.24, 0.1, 'torso')[0]);
+  const size = Math.min(2 * halfW * 0.8, 0.28);     // the digits fill ~60% of the plane; corners are transparent
+  const out = [];
+  for (const back of [false, true]) {
+    const keys = back ? CHEST_BACK : CHEST_FRONT;
+    const A = M.point(0, 1.12, zOn(keys, 1.12), 'torso'), B = M.point(0, 1.28, zOn(keys, 1.28), 'torso');
+    const dy = B[1] - A[1], dz = B[2] - A[2], l = Math.hypot(dy, dz);
+    const n = back ? [0, dz / l, -dy / l] : [0, -dz / l, dy / l];          // outward normal in the y-z plane
+    const g = new THREE.PlaneGeometry(size, size);
+    const uv = g.attributes.uv;
+    for (let i = 0; i < uv.count; i++) uv.setX(i, uv.getX(i) * 0.5 + (back ? 0.5 : 0));
+    const m = new THREE.Mesh(g, mat);
+    m.position.set((A[0] + B[0]) / 2 - J.chest[0], (A[1] + B[1]) / 2 - J.chest[1] + (back ? 0.01 : 0), (A[2] + B[2]) / 2 - J.chest[2] + n[2] * 0.004);
+    // front: tilt about X so the plane's +Z is the normal; back: turn around (π about Y) first
+    if (back) m.quaternion.setFromEuler(new THREE.Euler(Math.atan2(-n[1], -n[2]), Math.PI, 0, 'YXZ'));
+    else m.rotation.x = Math.atan2(-n[1], n[2]);
+    chest.add(m);
+    out.push(m);
+  }
+  return out;
 }
 
 /** Put a rig into the reference T-pose (arms out). */

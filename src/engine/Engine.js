@@ -34,6 +34,7 @@ export class FootballEngine {
     this.paused = false;
     this.players = [];
     this.listeners = {};
+    this.playerModel = opts.playerModel || 'meshy';   // 'meshy' (character system) | 'classic' (previous code-built players)
     this.autoDeadBall = opts.autoDeadBall ?? true; // engine marks ball dead on down / OOB / incomplete
     this.onUpdate = null;
 

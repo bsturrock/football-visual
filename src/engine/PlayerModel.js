@@ -272,7 +272,11 @@ export function createPlayerRig(o) {
 }
 
 // --- numbers + name ----------------------------------------------------------------
-function addNumbers(chest, D, K, number, name, y0, y1) {
+/**
+ * Number/name decal material (shared with the character system). Texture: left half = front number,
+ * right half = back (name above number). Planes use u 0..0.5 for the front, 0.5..1 for the back.
+ */
+export function numberDecalMaterial(K, number, name) {
   const cv = document.createElement('canvas');
   cv.width = 512; cv.height = 256;
   const ctx = cv.getContext('2d');
@@ -290,7 +294,11 @@ function addNumbers(chest, D, K, number, name, y0, y1) {
   const tex = new THREE.CanvasTexture(cv);
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.anisotropy = 4;
-  const mat = new THREE.MeshStandardMaterial({ map: tex, transparent: true, alphaTest: 0.4, roughness: 0.78, depthWrite: false });
+  return new THREE.MeshStandardMaterial({ map: tex, transparent: true, alphaTest: 0.4, roughness: 0.78, depthWrite: false });
+}
+
+function addNumbers(chest, D, K, number, name, y0, y1) {
+  const mat = numberDecalMaterial(K, number, name);
 
   // chest is a tapered box: decals lie on its sloped front/back faces
   const h = y1 - y0;

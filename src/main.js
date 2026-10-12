@@ -4,6 +4,7 @@ import { DemoSim } from './demo/DemoSim.js';
 const params = new URLSearchParams(location.search);
 const engine = new FootballEngine(document.getElementById('app'), {
   preserveDrawingBuffer: params.has('capture'),
+  playerModel: params.has('classic') ? 'classic' : 'meshy',   // ?classic = the previous players (fallback)
 });
 // The demo driver. Swap this for your coach/sim layer.
 const sim = params.has('nosim') ? null : new DemoSim(engine);

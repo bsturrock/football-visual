@@ -279,3 +279,38 @@ blueprint `src/engine/characters/mediumBlueprint.js`, which `createMediumPlayer(
 - **Visor:** the Meshy helmet has no separate visor (the facemask and visor slot are one fused mesh), so there is no visor toggle,
   as the docs require. A visor would need its own asset.
 - **Viewer:** `tools/poses/index.html` takes `helmet=1`, `faces=1`, and team colours `primary=`, `secondary=`, `helmetc=`, `mask=`.
+
+---
+
+# Milestone 7 — game integration (for review)
+
+- **`src/engine/characters/gamePlayer.js`:** `createGameRig()`, a drop-in for `createPlayerRig` with the same interface
+  (root / tilt / yaw / 17 bones / leg / scale / dims / meshes / decals).
+  - **Units:** metres → yards sits on `tilt`, so world positions and baked bench geometry are in yards.
+  - **Face:** from the player's seed with the skin tone the game picked.
+  - **Numbers / names:** decals lie on the chest's measured front and back slopes.
+  - **Helmet:** attached when its 58 KB file arrives.
+- **Switch:**
+  - `FootballEngine({ playerModel: 'meshy' | 'classic' })`, default `'meshy'`; `?classic` in the URL brings back the previous players.
+  - `Player.js` and the bench builder in `Stadium.js` choose the builder (benches: helmets off).
+  - The number-decal canvas is shared (`PlayerModel.numberDecalMaterial`).
+- **No other engine code changed:** Animator, Physics, Ball and Engine logic are untouched.
+- **Profile** (SwiftShader, same scene, 22 players; times only meaningful relative to each other):
+
+  | | meshy | classic |
+  |---|---|---|
+  | draw calls per frame (incl. shadows) | 922 | 834 |
+  | triangles per frame | 1.40 M | 1.14 M |
+  | player triangles | 67,488 (~3,070 each incl. helmet) | 17,908 |
+  | player animation cost per frame | 0.15 ms | 0.12 ms |
+  | render | 3.3 ms | 4.1 ms |
+  | 180 s of simulation (no render) | 5.8 s | 4.9–5.4 s |
+
+  No LOD needed on this evidence. Most triangles are the stadium and crowd.
+- **Stress run:** 180 s of game time with snaps, throws, catches, deflections, handoffs, hits, falls and downs; no errors.
+- **Gameplay coupling:**
+  - The sim reads two things from the rig. `rig.scale` (catch reach) is identical for every body.
+  - The right-hand bone is the throw origin and the carried-ball anchor. It sits 3–4 in from the classic position at rest or carrying, and 8–9 in at release.
+    Throws are aimed from that origin, so they still arrive at the intended target; only the start point of the flight moves.
+  - For strict parity the throw origin could come from a model-independent point (classic arm lengths).
+    That's a small change in `Ball.js`, not done without your OK.

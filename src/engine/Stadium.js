@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/BufferGeometryUtils.js';
 import { prep, PLAYER_MATERIAL, createPlayerRig, bakeRig, disposeRig } from './PlayerModel.js';
+import { createGameRig } from './characters/gamePlayer.js';
 import { resolveBody } from './Body.js';
 import { resolveKit } from './Uniforms.js';
 import { FIELD, SKIN_TONES } from './constants.js';
@@ -256,7 +257,8 @@ export function buildBenchPlayers(engine) {
     const positions = ['OL', 'WR', 'LB', 'RB', 'QB', 'DL'];
     const variants = positions.map((position, i) => {
       const skin = SKIN_TONES[(i * 2 + (key === 'home' ? 1 : 3)) % SKIN_TONES.length];
-      const rig = createPlayerRig({ body: resolveBody({ seed: 1000 + i * 17 + (key === 'home' ? 0 : 7), position }), kit, skin });
+      const build = engine.playerModel === 'classic' ? createPlayerRig : createGameRig;
+      const rig = build({ body: resolveBody({ seed: 1000 + i * 17 + (key === 'home' ? 0 : 7), position }), kit, skin, helmet: false });  // bench: helmets off
       const b = rig.bones;
       b.shL.rotation.set(0.05, 0, 0.18); b.shR.rotation.set(0.05, 0, -0.18); b.elL.rotation.x = -0.3; b.elR.rotation.x = -0.3;
       if (i % 2) { b.shL.rotation.z = 0.7; b.elL.rotation.x = -1.6; b.elL.rotation.y = 0.8; b.shR.rotation.z = -0.7; b.elR.rotation.x = -1.6; b.elR.rotation.y = -0.8; }
