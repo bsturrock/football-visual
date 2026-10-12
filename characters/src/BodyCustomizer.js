@@ -55,49 +55,46 @@ export function bodyScales(body) {
   };
 }
 
-/** Returns a reshaped copy of the base geometry's positions (geometry is not modified). */
-export function reshape(baseGeometry, body) {
-  const B = BASE, S = bodyScales(body);
+/**
+ * Map one point of the base player (T-pose, metres) into the reshaped body.
+ * Used for mesh vertices and skeleton joints alike, so the rig stays aligned.
+ */
+export function mapPoint(S, x, y, z, out) {
+  const B = BASE;
+  const ax = Math.abs(x), sx = Math.sign(x) || 1;
+  const mapY = (v) => (v <= B.hipY ? v * S.legK : S.hipY + (v - B.hipY) * S.torsoK);
+  if (y >= B.neckY && ax < B.helmetX) {
+    // helmet: rigid, moved up with the neck
+    return out.set(x, y + S.neckY - B.neckY, z);
+  }
+  if (ax > B.armX && y > 1.1) {
+    // arm (T-pose, along x): root follows the shoulders, length and thickness scale
+    const t = smooth(B.armX + 0.05, 0.68, ax);
+    const thick = lerp(S.upperArm, S.forearm, t);
+    return out.set(sx * (B.armX * S.shoulders + (ax - B.armX) * S.armLen), mapY(B.armY) + (y - B.armY) * thick, z * thick);
+  }
+  if (y < B.hipY - 0.1) {
+    // legs: thickness scales around each leg's own axis, stance follows the hips
+    const k = lerp(S.calf, S.thigh, smooth(0.12, 0.6, y));
+    return out.set(sx * (B.legX * S.hips + (ax - B.legX) * k), mapY(y), z * k);
+  }
+  // torso: width blends by height between region parameters
+  let wx, wz;
+  if (y >= B.chestY) { const t = smooth(B.chestY, B.shoulderY, y); wx = lerp(S.chest, S.shoulders, t); wz = S.chestD; }
+  else if (y >= B.waistY) { const t = smooth(B.waistY, B.chestY, y); wx = lerp(S.waist, S.chest, t); wz = lerp(S.waistD, S.chestD, t); }
+  else { const t = smooth(B.hipY - 0.1, B.waistY, y); wx = lerp(S.hips, S.waist, t); wz = lerp(S.glutes, S.waistD, t); }
+  if (y > B.neckY - 0.08 && ax < B.helmetX) { const t = smooth(B.neckY - 0.08, B.neckY, y); wx = lerp(wx, S.neck, t); wz = lerp(wz, S.neck, t); }
+  return out.set(x * wx, mapY(y), z * wz);
+}
+
+/** Reshaped copy of the base geometry (all other attributes, incl. skin weights, are kept). */
+export function reshape(baseGeometry, body, S = bodyScales(body)) {
   const src = baseGeometry.attributes.position;
   const out = new Float32Array(src.count * 3);
-  const mapY = (y) => (y <= B.hipY ? y * S.legK : S.hipY + (y - B.hipY) * S.torsoK);
+  const v = new THREE.Vector3();
   for (let i = 0; i < src.count; i++) {
-    let x = src.getX(i), y = src.getY(i), z = src.getZ(i);
-    const ax = Math.abs(x), sx = Math.sign(x) || 1;
-    if (y >= B.neckY && ax < B.helmetX) {
-      // helmet: rigid, moved up with the neck
-      y += S.neckY - B.neckY;
-    } else if (ax > B.armX && y > 1.1) {
-      // arm (T-pose, along x): root follows the shoulders, length and thickness scale
-      const t = smooth(B.armX + 0.05, 0.68, ax);                    // upper arm → forearm
-      const thick = lerp(S.upperArm, S.forearm, t);
-      const rootX = B.armX * S.shoulders;
-      x = sx * (rootX + (ax - B.armX) * S.armLen);
-      const newArmY = mapY(B.armY);
-      y = newArmY + (y - B.armY) * thick;
-      z *= thick;
-    } else {
-      // torso and legs: width blends by height between region parameters
-      let wx, wz;
-      if (y >= B.chestY) { const t = smooth(B.chestY, B.shoulderY, y); wx = lerp(S.chest, S.shoulders, t); wz = S.chestD; }
-      else if (y >= B.waistY) { const t = smooth(B.waistY, B.chestY, y); wx = lerp(S.waist, S.chest, t); wz = lerp(S.waistD, S.chestD, t); }
-      else if (y >= B.hipY - 0.1) { const t = smooth(B.hipY - 0.1, B.waistY, y); wx = lerp(S.hips, S.waist, t); wz = lerp(S.glutes, S.waistD, t); }
-      else {
-        // legs: thickness scales around each leg's own axis, stance follows the hips
-        const t = smooth(0.12, 0.6, y);
-        const k = lerp(S.calf, S.thigh, t);
-        const cx = B.legX * S.hips;
-        x = sx * (cx + (ax - B.legX) * k);
-        z *= k;
-        y = mapY(y);
-        out[i * 3] = x; out[i * 3 + 1] = y; out[i * 3 + 2] = z;
-        continue;
-      }
-      if (y > B.neckY - 0.08 && ax < B.helmetX) { const t = smooth(B.neckY - 0.08, B.neckY, y); wx = lerp(wx, S.neck, t); wz = lerp(wz, S.neck, t); }
-      x *= wx; z *= wz;
-      y = mapY(y);
-    }
-    out[i * 3] = x; out[i * 3 + 1] = y; out[i * 3 + 2] = z;
+    mapPoint(S, src.getX(i), src.getY(i), src.getZ(i), v);
+    out[i * 3] = v.x; out[i * 3 + 1] = v.y; out[i * 3 + 2] = v.z;
   }
   const g = baseGeometry.clone();
   g.setAttribute('position', new THREE.BufferAttribute(out, 3));

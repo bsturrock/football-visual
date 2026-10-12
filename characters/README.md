@@ -58,6 +58,33 @@ A first, simple version of Milestone 3, used by the viewer:
 - Landmarks (`BASE`) are measured from `base-medium.glb`. The same landmarks will position the
   skeleton joints in Milestone 2 so mesh and rig stay aligned.
 
-## Next: Milestone 2 (rig + animate one player)
+## Milestone 2: rig + animate ✅ (first pass)
 
-See the review notes in the project discussion; requirements are tracked in `ARCHITECTURE.md`.
+```
+python3 characters/tools/rig_base.py -- characters/assets/base-medium.glb characters/assets/base-medium-rigged.glb
+```
+
+- **Skeleton:** 17 bones named after the game's animator joints (`pelvis, spine, chest, neck, head,
+  shL/elL/handL, shR/elR/handR, hipL/knL/ankL, hipR/knR/ankR`), placed on landmarks measured from the
+  mesh's colour bands (knee skin band, wristband, glove, sock, cleat).
+- **Weights:** automatic (bone heat) on the welded mesh, max 4 per vertex. Shoulder pads are moved
+  onto the chest with a short blend at the pad edge, so raising the arms doesn't pinch the torso.
+- **Runtime (`src/PlayerRig.js`):** each player gets a reshaped geometry and a skeleton whose joints
+  are moved by the same `mapPoint` function, then re-bound, so every height/weight is rigged correctly.
+  The game's `Animator` drives an invisible proxy joint hierarchy (arms-down convention); its world
+  rotations are copied onto the bones through bind offsets (`bone = proxy × offset`).
+- **Viewer poses:** T-pose, idle, run, sprint, backpedal, shuffle, 3-point / 2-point / WR stance,
+  block, tackle, catch (arms up), throw, fall. URL `pose=…`, `speed=1|0.5|0.25|0`.
+
+Known: neck has almost no own vertices (helmet + collar are weighted to head/chest), fine for now;
+forearms can clip the chest in the block pose.
+
+## Next: Milestone 2.5 (separate helmet, head, facemask)
+
+1. Split the helmet from the body; attach it to the head bone. Helmet on/off in the viewer.
+2. Simple boxy head under it; seeded faces (eyes, brows, mouth as flat blocks).
+3. New facemask built from `docs/reference/facemask.png` as its own part (frame, one cross bar,
+   three short verticals, chamfered chin bar). Opens the door to facemask/helmet variants.
+4. Seeded hair and facial hair pieces (blocky), hair colour palette.
+
+Then Milestones 3–4 (body tuning, 20-linebacker variation test), 5 (22 players in the game).
