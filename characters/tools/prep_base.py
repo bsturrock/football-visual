@@ -7,6 +7,7 @@ Milestone 1: clean the medium base player and export it for Three.js.
 The source file is never modified. Steps:
   - weld UV-seam vertex splits into one connected mesh (needed for skinning later)
   - fix the source: lower facemask cage -> flat plate with two openings; back of neck -> skin
+  - exact left/right symmetry: keep the +X half and mirror it (MIRROR_KEEP=-1 keeps -X)
   - consistent outward normals, flat shading
   - matte material: base colour only (drop the metallic/roughness map), texture <= 1024 px
   - real-world scale: 6'1" (1.854 m) to the top of the helmet
@@ -98,6 +99,16 @@ neck = [f for f in bm.faces if 0.45 < f.calc_center_median().z < 0.64 and f.calc
         and abs(f.calc_center_median().x) < 0.16 and colour(f) == 'dark']
 for f in neck:
     for l in f.loops: l[uvl].uv = SKIN_UV
+# 3. symmetry: keep one half (MIRROR_KEEP = +1 keeps +X, the player's left) and mirror it
+KEEP = int(os.environ.get('MIRROR_KEEP', '1'))
+bmesh.ops.bisect_plane(bm, geom=bm.verts[:] + bm.edges[:] + bm.faces[:], dist=1e-5,
+                       plane_co=(0, 0, 0), plane_no=(1, 0, 0), clear_inner=(KEEP > 0), clear_outer=(KEEP < 0))
+centre = [v for v in bm.verts if abs(v.co.x) < 1e-4]
+for v in centre: v.co.x = 0.0
+bmesh.ops.mirror(bm, geom=bm.verts[:] + bm.edges[:] + bm.faces[:], matrix=Matrix.Identity(4), axis='X', merge_dist=1e-4)
+bmesh.ops.remove_doubles(bm, verts=bm.verts, dist=1e-4)
+bmesh.ops.triangulate(bm, faces=[f for f in bm.faces if len(f.verts) > 3])
+print(f'symmetry: kept {"+X" if KEEP > 0 else "-X"} half, mirrored')
 print(f'fixes: facemask cage {len(cage)} faces -> plate {len(filled)} + 2 openings; neck faces recoloured {len(neck)}')
 bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
 for f in bm.faces:

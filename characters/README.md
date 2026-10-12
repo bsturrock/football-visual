@@ -21,10 +21,10 @@ python3 characters/tools/prep_base.py -- characters/source/med-base-low-poly.glb
 
 | Check | Result |
 |---|---|
-| Triangles | 1,182 (one connected mesh, 599 vertices) |
+| Triangles | 1,340 (one connected mesh, exactly symmetric) |
 | Shading | flat, matte (metallic/roughness map removed) |
 | Colours | base-colour texture, 1024 px |
-| Pose | T-pose, symmetric |
+| Pose | T-pose, exactly symmetric (mirrored) |
 | Scale / origin | 1.854 m (6'1") to the helmet top, feet at y = 0, centred |
 | Facing | +Z (glTF), same as the game's rigs |
 | File size | 1.5 MB |
@@ -39,6 +39,9 @@ python3 characters/tools/prep_base.py -- characters/source/med-base-low-poly.glb
 1. **Lower facemask:** the crumpled cage (61 sliver faces, both non-manifold edges) is replaced
    by a flat white plate with two dark rectangular openings. 0 bad edges remain.
 2. **Back of the neck:** faces painted dark grey are recoloured to skin (UVs point at a skin texel).
+3. **Symmetry:** the mesh is cut at x = 0 and the +X half (player's left, the cleaner side) is
+   mirrored, so chest, pelvis, helmet and limbs are exactly symmetric. The centre cut adds ~160 triangles.
+   `MIRROR_KEEP=-1` keeps the other half instead.
 
 Remaining, acceptable at game scale: ear pieces are thin wedges; colours are painted across
 triangles (fine with the texture; per-face solid colours would need edge loops at colour borders).
