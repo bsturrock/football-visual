@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/BufferGeometryUtils.js';
 import { prep, PLAYER_MATERIAL, createPlayerRig, bakeRig } from './PlayerModel.js';
-import { Retargeter, kitColors, MODEL_MATERIAL } from './ModelLibrary.js';
+import { Retargeter, kitColors } from './ModelLibrary.js';
 import { FIELD, SKIN_TONES } from './constants.js';
 
 // ---------------------------------------------------------------------------
@@ -266,7 +266,7 @@ export function buildBenchPlayers(engine) {
         const rt = new Retargeter(rig, inst, { line: 2.16, big: 2.08, skill: 2.0, qb: 2.04 }[build], build === 'big' ? 0.9 : 1);
         pose();
         const geo = rt.bake();
-        return { geo, mat: MODEL_MATERIAL };
+        return { geo, mat: inst.mesh.material };
       }
       pose();
       const geo = bakeRig(rig);

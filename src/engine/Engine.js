@@ -86,9 +86,9 @@ export class FootballEngine {
 
   /**
    * Load the stylized GLB player models. Call (and await) before adding players.
-   * urls: { line: 'assets/lineman_styl.glb', skill: 'assets/wr_styl.glb' }
+   * urls: { line: 'assets/big.glb', skill: 'assets/small.glb' }
    */
-  async loadModels(urls = { line: 'assets/lineman_styl.glb', skill: 'assets/wr_styl.glb' }) {
+  async loadModels(urls = { line: 'assets/big.glb', skill: 'assets/small.glb' }) {
     this.models = await new ModelLibrary().load(urls);
     // rebuild the sideline players from the new models
     const old = this.scene.getObjectByName('benchPlayers');

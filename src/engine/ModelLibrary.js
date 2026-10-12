@@ -5,7 +5,14 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { STAND_PELVIS } from './PlayerModel.js';
 
 // ---------------------------------------------------------------------------
-// Stylized GLB player models (Meshy → Mixamo → tools/blender/stylize.py).
+// GLB player models. Two kinds of source are supported:
+//
+//  A) Textured (current low-poly Meshy models, auto-rigged with Mixamo bone
+//     names): the painted texture is kept and recoloured per team. Every texel
+//     is classed blue / white / skin / dark and replaced with the kit colour,
+//     so painted bands stay crisp and no per-model Blender work is needed.
+//
+//  B) Region materials (older stylize.py output), described below:
 //
 //  • Each source GLB has one primitive per *region material* (jersey, pants,
 //    stripe, socks, band, helmet, mask, facehole, skin, gloves, wrist, cleats).
@@ -31,6 +38,25 @@ export function kitColors(team, kit, skin) {
     gloves: kit === 'line' ? '#2a2e38' : kit === 'skill' ? P : skin,
     wrist: P, cleats: kit === 'line' ? '#262a35' : P,
   };
+}
+
+/** Texture recolour palette for a team kit (textured models). */
+function texturePalette(colors) {
+  return { blue: colors.jersey, white: colors.helmet, skin: colors.skin, dark: colors.facehole };
+}
+
+/** sRGB 0..255 → colour class of a Meshy kit texel. */
+function texelClass(r, g, b) {
+  const max = Math.max(r, g, b), min = Math.min(r, g, b);
+  const v = max / 255, s = max ? (max - min) / max : 0;
+  if (v < 0.3) return 'dark';
+  if (s < 0.3) return 'white';
+  let h;
+  if (max === r) h = ((g - b) / (max - min) + 6) % 6;
+  else if (max === g) h = (b - r) / (max - min) + 2;
+  else h = (r - g) / (max - min) + 4;
+  h /= 6;
+  return h > 0.5 && h < 0.75 ? 'blue' : 'skin';
 }
 
 const regionOf = (mat) => (mat?.name || '').replace(/\.\d+$/, '');
@@ -61,13 +87,57 @@ export class ModelLibrary {
         for (let i = 0; i < p.count; i += 3) { v.fromBufferAttribute(p, i); m.applyBoneTransform(i, v); v.applyMatrix4(m.matrixWorld); box.expandByPoint(v); }
       }
       const hips = bones.Hips.getWorldPosition(new THREE.Vector3());
-      this.src[key] = { scene, meshes, bones, box, height: box.max.y - box.min.y, hipY: hips.y - box.min.y, minY: box.min.y };
+      const map = meshes[0].material.map;
+      const textured = !!map && !kitColors({}, 'line', '')[regionOf(meshes[0].material)];
+      if (textured) this._classify(key, map.image);
+      this.src[key] = { scene, meshes, bones, box, height: box.max.y - box.min.y, hipY: hips.y - box.min.y, minY: box.min.y, textured, map };
     }));
     return this;
   }
 
-  /** Merged, vertex-coloured skinned geometry for a colour set (cached). */
+  /** Per-texel colour class of a textured model, computed once at load. */
+  _classify(key, image) {
+    const w = image.width, h = image.height;
+    const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+    const ctx = cv.getContext('2d');
+    ctx.drawImage(image, 0, 0);
+    const px = ctx.getImageData(0, 0, w, h).data;
+    const CLS = ['blue', 'white', 'skin', 'dark'];
+    const cls = new Uint8Array(w * h);
+    for (let i = 0; i < w * h; i++) cls[i] = CLS.indexOf(texelClass(px[i * 4], px[i * 4 + 1], px[i * 4 + 2]));
+    (this.classes ||= {})[key] = { cls, w, h, CLS };
+  }
+
+  /** Matte material with the texture recoloured for a kit (cached per colour set). */
+  material(key, colors) {
+    const src = this.src[key];
+    if (!src.textured) return MODEL_MATERIAL;
+    const pal = texturePalette(colors);
+    const id = 'mat|' + key + '|' + Object.values(pal).join(',');
+    let m = this.variants.get(id);
+    if (m) return m;
+    const { cls, w, h, CLS } = this.classes[key];
+    const rgb = CLS.map(k => new THREE.Color(pal[k]).convertLinearToSRGB());
+    const data = new Uint8Array(w * h * 4);
+    for (let i = 0; i < w * h; i++) {
+      const c = rgb[cls[i]];
+      data[i * 4] = c.r * 255; data[i * 4 + 1] = c.g * 255; data[i * 4 + 2] = c.b * 255; data[i * 4 + 3] = 255;
+    }
+    const tex = new THREE.DataTexture(data, w, h);
+    tex.flipY = src.map.flipY;
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.magFilter = THREE.LinearFilter;
+    tex.generateMipmaps = true;
+    tex.minFilter = THREE.LinearMipmapLinearFilter;
+    tex.needsUpdate = true;
+    m = new THREE.MeshStandardMaterial({ map: tex, flatShading: true, roughness: 0.95, metalness: 0 });
+    this.variants.set(id, m);
+    return m;
+  }
+
+  /** Skinned geometry for a colour set (cached). Textured models share one geometry. */
   geometry(key, colors) {
+    if (this.src[key].textured) return this._texturedGeometry(key);
     const id = key + '|' + Object.values(colors).join(',');
     let g = this.variants.get(id);
     if (g) return g;
@@ -114,6 +184,17 @@ export class ModelLibrary {
     return g;
   }
 
+  _texturedGeometry(key) {
+    const id = 'geo|' + key;
+    let g = this.variants.get(id);
+    if (g) return g;
+    const src = this.src[key];
+    g = src.meshes[0].geometry.index ? src.meshes[0].geometry.toNonIndexed() : src.meshes[0].geometry.clone();
+    for (const k of Object.keys(g.attributes)) if (!['position', 'normal', 'uv', 'skinIndex', 'skinWeight'].includes(k)) g.deleteAttribute(k);
+    this.variants.set(id, g);
+    return g;
+  }
+
   /** New skinned instance: { root, mesh, bones, src } — one draw call. */
   instantiate(key, colors) {
     const src = this.src[key];
@@ -123,7 +204,7 @@ export class ModelLibrary {
     const mesh = meshes[0];
     for (const m of meshes.slice(1)) m.parent.remove(m);
     mesh.geometry = this.geometry(key, colors);
-    mesh.material = MODEL_MATERIAL;
+    mesh.material = this.material(key, colors);
     mesh.castShadow = true;
     mesh.frustumCulled = false;
     const bones = {};
@@ -246,7 +327,8 @@ export class Retargeter {
     }
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.BufferAttribute(out, 3));
-    g.setAttribute('color', src.attributes.color.clone());
+    if (src.attributes.color) g.setAttribute('color', src.attributes.color.clone());
+    else g.setAttribute('uv', src.attributes.uv.clone());
     g.computeVertexNormals();
     return g;
   }

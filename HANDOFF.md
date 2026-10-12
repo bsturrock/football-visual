@@ -11,8 +11,9 @@ Tackles, catches and blocking must be **physics-driven**, not canned animations.
 
 ## Current state
 - Engine: `src/engine/*`. See README for the API and events. The demo driver is `src/demo/DemoSim.js`; it is replaceable.
-- Players: stylized GLB models (`assets/lineman_styl.glb`, `assets/wr_styl.glb`), loaded by
-  `ModelLibrary.js`. Each player gets one draw call, with region colours baked per team/kit/skin into vertex colours.
+- Players: ultra-low-poly textured GLB models (`assets/big.glb` for line builds, `assets/small.glb` for skill builds), loaded by
+  `ModelLibrary.js`. The painted texture is recoloured per team/skin (texels classed blue/white/skin/dark → kit colour); one draw call per player.
+  The older region-material models (`assets/lineman_styl.glb`, `assets/wr_styl.glb`) still load through the same API.
 - Animation: the procedural animator drives an invisible proxy skeleton (`PlayerModel.js`).
   `Retargeter` copies its world rotations onto the Mixamo bones (bind offsets are computed
   by aiming proxy limbs along the model's T-pose segments).
@@ -20,7 +21,13 @@ Tackles, catches and blocking must be **physics-driven**, not canned animations.
   Each player has random height and width multipliers.
 - `?procedural` in the URL uses the old code-built players (fallback). `?nosim` shows an empty field.
 
-## Model pipeline (Meshy → Mixamo → Blender)
+## Model pipeline (current: Meshy low-poly → cleanup → Meshy auto-rig)
+1. Meshy low-poly generation (T-pose, ~700–1200 tris, kit painted in blue/white/skin/dark).
+2. `python3 tools/blender/prep_for_rig.py -- assets/source/<name>.glb assets/source/<name>-prepped --height 1.93`
+   (welds seams, flat shading, base-colour texture only, feet at origin, real scale).
+3. Rig `<name>-prepped.glb` with Meshy's auto-rigger (no remesh). It outputs Mixamo bone names, so it drops straight into `assets/`.
+
+## Old model pipeline (Meshy → Mixamo → Blender stylize)
 1. Meshy: T-pose, triangles, about 3–5k triangles, solid region colours, GLB/FBX.
 2. Mixamo auto-rig, no fingers, T-pose FBX with skin. Then a rigged GLB.
 3. `pip install bpy==4.2.0`, then
