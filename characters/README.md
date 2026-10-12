@@ -90,7 +90,9 @@ the facemask from the provided helmet (`source/helmet.glb`, which matches `docs/
   sets them 5 cm forward so the whole mask sits in front (as on the provided helmet). It's flipped in X
   so the half with the reference layout (two large + two narrow lower openings) is the one mirrored.
 - The old cross bar + cage (71 faces) are painted dark, so they read as shadow behind the new bars;
-  no holes are cut in the original helmet.
+  no holes are cut in the original helmet. Where the facemask joins the helmet (outer columns of the
+  old cage, visor side walls, below the mask's bottom bar) everything is white, so the connection is
+  solid with no black slivers; only the visor and the mask's openings stay dark.
 - The facemask is white (body texture) and weighted to the head by the rig step.
 
 ## Next (to agree)

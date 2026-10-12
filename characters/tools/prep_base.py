@@ -85,6 +85,18 @@ old_lo = Vector([min(v.co[i] for v in ov) for i in range(3)])
 old_hi = Vector([max(v.co[i] for v in ov) for i in range(3)])
 for f in old_mask:
     for l in f.loops: l[uvl].uv = DARK_UV
+# the outer sides of the face opening (where the new facemask meets the helmet) are white helmet,
+# not shadow: anything dark there (old bars or dark paint) becomes white so no black slivers show
+def is_side(c):
+    ax = abs(c.x)
+    if not (0.58 <= c.z <= 0.88 and c.y <= -0.08 and ax <= 0.2):
+        return False
+    if c.z < 0.62: return True                 # under the new facemask's bottom bar
+    if c.z < 0.72: return ax >= 0.10           # lower cage: outer columns (where the mask joins the helmet)
+    return ax >= 0.13                          # visor: side walls only, the opening stays dark
+sides = [f for f in bm.faces if is_side(f.calc_center_median()) and (f in set(old_mask) or colour(f) == 'dark')]
+for f in sides:
+    for l in f.loops: l[uvl].uv = WHITE_UV
 
 HELMET_SRC = os.path.join(os.path.dirname(os.path.abspath(src)), 'helmet.glb')
 before = set(bpy.data.objects)
@@ -114,7 +126,7 @@ bpy.data.objects.remove(hobj, do_unlink=True)
 for o in bpy.data.objects:
     o.select_set(o is obj)
 bpy.context.view_layer.objects.active = obj
-print(f'facemask: old {len(old_mask)} faces painted dark; new facemask {len(added)} faces, scale {k:.3f}, '
+print(f'facemask: old {len(old_mask)} faces painted dark ({len(sides)} side faces white); new facemask {len(added)} faces, scale {k:.3f}, '
       f'z {old_lo.z + (new_lo.z - new_lo.z) * k:.3f}..{old_lo.z + (new_hi.z - new_lo.z) * k:.3f} (old {old_lo.z:.3f}..{old_hi.z:.3f})')
 
 # 2. back of the neck: painted dark grey in the texture -> recolour as skin
