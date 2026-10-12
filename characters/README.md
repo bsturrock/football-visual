@@ -39,7 +39,10 @@ python3 characters/tools/prep_base.py -- characters/source/med-base-low-poly.glb
 1. **Facemask:** geometry kept exactly as modelled. Faces at the outer ends of the lower mask (where it
    joins the helmet) were painted dark in the texture and read as holes; they're recoloured white.
    2 harmless edges shared by 4 faces remain.
-2. **Back of the neck:** faces painted dark grey are recoloured to skin (UVs point at a skin texel).
+2. **Face:** there's no face geometry, only a dark panel behind the visor and lower mask. Its
+   front-facing faces are painted skin so a face shows through (side walls stay dark as shadow).
+   It follows the skin tone setting.
+2b. **Back of the neck:** faces painted dark grey are recoloured to skin (UVs point at a skin texel).
 3. **Symmetry:** the mesh is cut at x = 0 and the +X half (player's left, the cleaner side) is
    mirrored, so chest, pelvis, helmet and limbs are exactly symmetric. The centre cut adds ~190 triangles.
    `MIRROR_KEEP=-1` keeps the other half instead.
