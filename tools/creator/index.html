@@ -1,0 +1,305 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Character creator — procedural football players</title>
+<style>
+  :root { --panel: #1b2232; --line: #2c3650; --txt: #dfe6f3; --dim: #8e9ab3; --acc: #4d8dff; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #c3c8cf; font: 12px/1.35 system-ui, sans-serif; color: var(--txt); }
+  #panel { position: fixed; left: 0; top: 0; bottom: 0; width: 330px; overflow-y: auto; background: var(--panel); padding: 10px 12px 40px; box-sizing: border-box; z-index: 2; }
+  #panel h1 { font-size: 15px; margin: 2px 0 8px; }
+  details { border-top: 1px solid var(--line); padding: 6px 0; }
+  summary { cursor: pointer; font-weight: 600; font-size: 13px; padding: 2px 0 4px; }
+  .row { display: grid; grid-template-columns: 112px 1fr 46px; align-items: center; gap: 6px; margin: 3px 0; }
+  .row label { color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .row input[type=range] { width: 100%; }
+  .row output { text-align: right; font-variant-numeric: tabular-nums; }
+  .row.over label { color: #ffd479; }
+  select, input[type=text], input[type=number] { width: 100%; box-sizing: border-box; background: #10151f; color: var(--txt); border: 1px solid var(--line); border-radius: 3px; padding: 3px 4px; }
+  input[type=color] { width: 100%; height: 22px; border: 0; background: none; padding: 0; }
+  .btns { display: flex; flex-wrap: wrap; gap: 4px; margin: 6px 0; }
+  button { background: #2a3identity; background: #2a3550; color: var(--txt); border: 1px solid #3a4768; border-radius: 3px; padding: 4px 8px; cursor: pointer; font-size: 12px; }
+  button:hover { background: #34426a; } button.on { background: var(--acc); border-color: var(--acc); }
+  .hint { color: var(--dim); font-size: 11px; margin: 2px 0 4px; }
+  #info { position: fixed; right: 10px; bottom: 10px; background: rgba(20,26,40,.82); padding: 6px 9px; border-radius: 4px; white-space: pre; font: 11px/1.35 ui-monospace, monospace; z-index: 2; }
+  #cams { position: fixed; right: 10px; top: 10px; z-index: 2; }
+  #json { width: 100%; height: 160px; background: #10151f; color: #b9c7e3; border: 1px solid var(--line); font: 10px/1.3 ui-monospace, monospace; display: none; margin-top: 6px; }
+  canvas { display: block; }
+</style>
+<script type="importmap">
+{ "imports": { "three": "../../vendor/three/three.module.js", "three/addons/": "../../vendor/three/addons/" } }
+</script>
+</head>
+<body>
+<div id="panel">
+  <h1>Character creator</h1>
+  <div class="btns">
+    <button id="rndAll">🎲 Random player</button><button id="rndBody">🎲 Body</button><button id="rndFace">🎲 Face</button>
+  </div>
+  <div class="btns"><button id="exportBtn">Copy appearance JSON</button><button id="resetBtn">Reset</button></div>
+  <textarea id="json" readonly></textarea>
+
+  <details open><summary>Body</summary>
+    <div class="row"><label>Position</label><select id="position"></select><span></span></div>
+    <div class="row"><label>Archetype</label><select id="archetype"></select><span></span></div>
+    <div id="bodyRows"></div>
+    <div class="hint">Proportions below follow height, weight, position and seed. Moving one overrides it (yellow); double-click a label to go back to automatic.</div>
+    <details><summary>Proportions (16)</summary><div id="propRows"></div></details>
+  </details>
+
+  <details open><summary>Face</summary>
+    <div class="row"><label>Skin tone</label><input id="skinTone" type="range" min="0" max="6" step="1"><output></output></div>
+    <div class="row"><label>Hair style</label><select id="hairStyle"></select><span></span></div>
+    <div class="row"><label>Hair colour</label><select id="hairColour"></select><span></span></div>
+    <div class="row"><label>Beard</label><select id="beard"></select><span></span></div>
+    <div class="row"><label>Face seed</label><input id="faceSeed" type="number" min="1" step="1"><span></span></div>
+    <div id="faceRows"></div>
+  </details>
+
+  <details open><summary>Uniform &amp; helmet</summary>
+    <div class="row"><label>Helmet</label><select id="helmet"><option value="on">on</option><option value="off">off</option></select><span></span></div>
+    <div class="row"><label>Primary</label><input id="primary" type="color"><span></span></div>
+    <div class="row"><label>Secondary</label><input id="secondary" type="color"><span></span></div>
+    <div class="row"><label>Helmet colour</label><input id="helmetc" type="color"><span></span></div>
+    <div class="row"><label>Facemask</label><input id="mask" type="color"><span></span></div>
+    <div class="row"><label>Set</label><select id="uniform"><option>home</option><option>away</option><option>alt</option></select><span></span></div>
+    <div class="row"><label>Number</label><input id="number" type="number" min="0" max="99"><span></span></div>
+    <div class="row"><label>Name</label><input id="name" type="text"><span></span></div>
+  </details>
+
+  <details open><summary>Pose</summary>
+    <div class="row"><label>Pose</label><select id="pose"></select><span></span></div>
+    <div class="row"><label>Speed</label><input id="speed" type="range" min="0" max="1.5" step="0.05"><output></output></div>
+  </details>
+</div>
+<div id="cams"><button data-cam="full">Full body</button> <button data-cam="head">Head</button> <button data-cam="side">Side</button> <button data-cam="broadcast">Broadcast</button></div>
+<div id="info"></div>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { createMediumPlayer } from '../../src/engine/characters/mediumPlayer.js';
+import { resolveFace, FACE_SHAPE_RANGES, HAIR_STYLES, HAIR_COLOURS, BEARDS, FACE_VERSION } from '../../src/engine/characters/face.js';
+import { loadHelmet, attachHelmet } from '../../src/engine/characters/helmet.js';
+import { resolveBody, PARAMS, ARCHETYPES, POSITION_ARCHETYPE } from '../../src/engine/Body.js';
+import { resolveKit } from '../../src/engine/Uniforms.js';
+import { Animator } from '../../src/engine/Animator.js';
+
+const $ = (id) => document.getElementById(id);
+const POSITIONS = ['QB', 'RB', 'FB', 'WR', 'TE', 'OT', 'OG', 'C', 'DT', 'DE', 'LB', 'CB', 'S', 'K'];
+const POSES = ['idle', 'rest', 'tpose', 'run', 'sprint', 'backpedal', 'shuffle', '3pt', '2pt', 'wr', 'block', 'tackle', 'catch', 'throw', 'fall'];
+const HAIR_NAMES = ['black', 'near-black', 'dark brown', 'brown', 'light brown', 'blond', 'red', 'grey'];
+const randSeed = () => 1 + Math.floor(Math.random() * 99999);
+
+// --- state ------------------------------------------------------------------------
+const DEFAULT = {
+  position: 'LB', archetype: 'auto', heightIn: 74, weightLb: 245, bodySeed: 14, bodyOverrides: {},
+  faceSeed: 14, skinTone: 2, hairStyle: 'short', hairColour: HAIR_COLOURS[1], beard: 'none', shapeOverrides: {},
+  helmet: 'on', primary: '#0255fd', secondary: '#ffffff', helmetc: '#f4f6f9', mask: '#f4f6f9', uniform: 'home', number: 54, name: 'Smith',
+  pose: 'idle', speed: 1,
+};
+let S = structuredClone(DEFAULT);
+
+// --- UI ----------------------------------------------------------------------------
+const fill = (sel, items, labels = items) => { sel.innerHTML = items.map((v, i) => `<option value="${v}">${labels[i]}</option>`).join(''); };
+fill($('position'), POSITIONS);
+fill($('archetype'), ['auto', ...Object.keys(ARCHETYPES)], ['auto (from position)', ...Object.keys(ARCHETYPES).map(k => k.replace('_', ' '))]);
+fill($('hairStyle'), HAIR_STYLES); fill($('beard'), BEARDS); fill($('hairColour'), HAIR_COLOURS, HAIR_NAMES); fill($('pose'), POSES);
+
+function row(parent, id, label, min, max, step, fmt = (v) => v) {
+  const r = document.createElement('div'); r.className = 'row';
+  r.innerHTML = `<label title="${label}">${label}</label><input type="range" min="${min}" max="${max}" step="${step}"><output></output>`;
+  parent.appendChild(r);
+  const input = r.querySelector('input'), out = r.querySelector('output');
+  return { r, input, out, set(v, over = false) { input.value = v; out.textContent = fmt(+v); r.classList.toggle('over', over); } };
+}
+const ftin = (v) => `${Math.floor(v / 12)}'${Math.round(v % 12)}"`;
+const bodyRows = {
+  heightIn: row($('bodyRows'), 'heightIn', 'Height', 66, 82, 0.5, ftin),
+  weightLb: row($('bodyRows'), 'weightLb', 'Weight (lb)', 160, 380, 1),
+  bodySeed: row($('bodyRows'), 'bodySeed', 'Body seed', 1, 999, 1),
+};
+const propRows = Object.fromEntries(PARAMS.map(k => [k, row($('propRows'), k, k.replace(/_/g, ' '), 0.7, 1.4, 0.005, v => v.toFixed(2))]));
+const faceRows = Object.fromEntries(Object.entries(FACE_SHAPE_RANGES).map(([k, [a, b]]) =>
+  [k, row($('faceRows'), k, k.replace(/([A-Z])/g, ' $1').toLowerCase(), a, b, (b - a) / 100, v => v.toFixed(2))]));
+
+// --- scene ---------------------------------------------------------------------------
+const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.outputColorSpace = THREE.SRGBColorSpace; renderer.toneMapping = THREE.NeutralToneMapping; renderer.toneMappingExposure = 1.05;
+renderer.shadowMap.enabled = true;
+document.body.appendChild(renderer.domElement);
+const scene = new THREE.Scene(); scene.background = new THREE.Color('#c3c8cf');
+scene.add(new THREE.HemisphereLight('#f2f6ff', '#6d8a58', 1.7));
+const sun = new THREE.DirectionalLight('#fffaf0', 2.5); sun.position.set(2.5, 6, 4); sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048); Object.assign(sun.shadow.camera, { left: -3, right: 3, top: 3, bottom: -3 }); scene.add(sun);
+const ground = new THREE.Mesh(new THREE.CircleGeometry(4, 48), new THREE.MeshStandardMaterial({ color: '#7fa36a', roughness: 1 }));
+ground.rotation.x = -Math.PI / 2; ground.receiveShadow = true; scene.add(ground);
+for (const [inch, col] of [[72, '#c0392b'], [78, '#7d3c98']]) {          // height marks: 6'0" and 6'6"
+  const bar = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.006, 0.006), new THREE.MeshBasicMaterial({ color: col }));
+  bar.position.set(-0.75, inch * 0.0254, -0.3); scene.add(bar);
+}
+const camera = new THREE.PerspectiveCamera(30, 1, 0.05, 100);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+const helmetAsset = await loadHelmet();
+
+let rig = null, anim = null, fp = null, built = null;
+function fakePlayer(r) {
+  return { rig: r, vel: new THREE.Vector2(), facing: 0, state: 'up', intent: { type: 'idle' }, crouch: 0, accelLocal: 0, action: null,
+    hasBall: false, lookAt: null, reachTarget: null, upper: null, fallDir: new THREE.Vector2(0, 1), fallAngle: 0, riseT: 0, riseDur: 1, pos: new THREE.Vector2() };
+}
+
+/** Resolve the appearance exactly as the game would, then build the rig. */
+function resolveAll() {
+  const body = resolveBody({ seed: S.bodySeed, position: S.position, heightIn: S.heightIn, weightLb: S.weightLb,
+    archetype: S.archetype === 'auto' ? undefined : S.archetype, overrides: S.bodyOverrides });
+  const face = resolveFace({ seed: S.faceSeed, skinTone: S.skinTone,
+    overrides: { hairStyle: S.hairStyle, hairColour: S.hairColour, beard: S.beard, shape: S.shapeOverrides } });
+  const kit = resolveKit({ primary: S.primary, secondary: S.secondary, helmet: S.helmetc, facemask: S.mask }, S.uniform);
+  return { body, face, kit };
+}
+
+function build() {
+  if (rig) { scene.remove(rig.root); for (const m of rig.meshes) m.geometry.dispose(); for (const d of rig.decals) { d.geometry.dispose(); d.material.map?.dispose(); } }
+  built = resolveAll();
+  rig = createMediumPlayer({ body: built.body, face: built.face, kit: { ...built.kit, gloveTrim: built.kit.trim, studs: '#d8dadf' }, number: S.number, name: S.name });
+  if (S.helmet === 'on') attachHelmet(rig, helmetAsset, built.kit);
+  rig.root.traverse(o => { if (o.isMesh) o.castShadow = true; });
+  scene.add(rig.root);
+  fp = fakePlayer(rig); anim = new Animator(fp); anim.phase = 0;
+  syncUI();
+  info();
+}
+
+// --- pose (the game's Animator drives the rig) ----------------------------------------
+function applyPose(dt) {
+  const pose = S.pose;
+  Object.assign(fp, { intent: { type: 'idle' }, upper: null, crouch: 0, state: 'up', fallAngle: 0, reachTarget: null, hasBall: false, accelLocal: 0 });
+  fp.vel.set(0, 0);
+  if (fp.action && pose !== 'throw') fp.action = null;
+  let lean = 0;
+  if (pose === 'tpose' || pose === 'rest') {
+    for (const b of Object.values(rig.bones)) b.rotation.set(0, 0, 0);
+    if (pose === 'tpose') { rig.bones.shL.rotation.z = Math.PI / 2; rig.bones.shR.rotation.z = -Math.PI / 2; }
+    const L = rig.leg; rig.bones.pelvis.position.y = L.FOOT_H + L.SHIN + L.THIGH - L.HIP_Y;
+    rig.tilt.quaternion.identity(); rig.root.position.y = 0; return;
+  }
+  const yd = 1 / 1.0936;                                   // Animator speeds are yards/s; this scene is metres
+  if (pose === 'run') fp.vel.set(0, 6.5 * yd);
+  if (pose === 'sprint') { fp.vel.set(0, 9.5 * yd); fp.accelLocal = 2; }
+  if (pose === 'backpedal') fp.vel.set(0, -4.5 * yd);
+  if (pose === 'shuffle') fp.vel.set(3.5 * yd, 0);
+  if (pose === '3pt' || pose === '2pt' || pose === 'wr') fp.intent = { type: 'stance', kind: pose };
+  if (pose === 'block') { fp.upper = 'block'; fp.crouch = 0.35; }
+  if (pose === 'tackle') { fp.upper = 'brace'; fp.crouch = 0.45; fp.vel.set(0, 3 * yd); lean = 0.35; }
+  if (pose === 'catch') fp.reachTarget = new THREE.Vector3(0, rig.heightM + 0.5, 0.45);
+  if (pose === 'throw') { if (!fp.action) fp.action = { type: 'throw', t: 0, dur: 1.1 }; fp.action.t = (fp.action.t + dt) % 1.6; fp.hasBall = true; fp.upper = 'qbHold'; }
+  if (pose === 'fall') { fp.state = 'down'; fp.fallAngle = 1.45; }
+  anim.update(dt);
+  rig.tilt.quaternion.setFromAxisAngle(new THREE.Vector3(1, 0, 0), fp.state === 'up' ? lean : fp.fallAngle);
+  rig.root.position.y = anim.lift;
+}
+
+// --- UI <-> state ------------------------------------------------------------------------
+function syncUI() {
+  for (const id of ['position', 'archetype', 'skinTone', 'hairStyle', 'hairColour', 'beard', 'faceSeed', 'helmet', 'primary', 'secondary', 'helmetc', 'mask', 'uniform', 'number', 'name', 'pose', 'speed']) $(id).value = S[id];
+  $('skinTone').nextElementSibling.textContent = S.skinTone + 1;
+  $('speed').nextElementSibling.textContent = (+S.speed).toFixed(2);
+  bodyRows.heightIn.set(S.heightIn); bodyRows.weightLb.set(S.weightLb); bodyRows.bodySeed.set(S.bodySeed);
+  for (const k of PARAMS) propRows[k].set(built.body.p[k], k in S.bodyOverrides);
+  for (const k in faceRows) faceRows[k].set(built.face.shape[k], k in S.shapeOverrides);
+}
+let pending = false;
+const rebuild = () => { if (!pending) { pending = true; requestAnimationFrame(() => { pending = false; build(); }); } };
+const num = (v) => (isNaN(+v) ? v : +v);
+for (const id of ['position', 'archetype', 'hairStyle', 'hairColour', 'beard', 'faceSeed', 'helmet', 'primary', 'secondary', 'helmetc', 'mask', 'uniform', 'number', 'name', 'skinTone']) {
+  $(id).addEventListener('input', () => {
+    S[id] = ['hairColour', 'primary', 'secondary', 'helmetc', 'mask', 'name', 'position', 'archetype', 'hairStyle', 'beard', 'helmet', 'uniform'].includes(id) ? $(id).value : num($(id).value);
+    if (id === 'position') { const a = ARCHETYPES[POSITION_ARCHETYPE[S.position]]; if (a) { S.heightIn = Math.round(a.heightIn[0] * 2) / 2; S.weightLb = Math.round(a.weightLb[0]); } }
+    rebuild();
+  });
+}
+$('pose').addEventListener('input', () => { S.pose = $('pose').value; fp.action = null; });
+$('speed').addEventListener('input', () => { S.speed = +$('speed').value; $('speed').nextElementSibling.textContent = S.speed.toFixed(2); });
+for (const [k, r] of Object.entries(bodyRows)) r.input.addEventListener('input', () => { S[k] = +r.input.value; rebuild(); });
+for (const [k, r] of Object.entries(propRows)) {
+  r.input.addEventListener('input', () => { S.bodyOverrides[k] = +r.input.value; rebuild(); });
+  r.r.querySelector('label').addEventListener('dblclick', () => { delete S.bodyOverrides[k]; rebuild(); });
+}
+for (const [k, r] of Object.entries(faceRows)) {
+  r.input.addEventListener('input', () => { S.shapeOverrides[k] = +r.input.value; rebuild(); });
+  r.r.querySelector('label').addEventListener('dblclick', () => { delete S.shapeOverrides[k]; rebuild(); });
+}
+function randomBody() {
+  S.position = POSITIONS[Math.floor(Math.random() * POSITIONS.length)]; S.archetype = 'auto'; S.bodySeed = randSeed(); S.bodyOverrides = {};
+  const a = ARCHETYPES[POSITION_ARCHETYPE[S.position]] || ARCHETYPES.balanced_athletic;
+  const g = () => (Math.random() + Math.random() + Math.random() - 1.5) * 1.4;
+  S.heightIn = Math.round((a.heightIn[0] + g() * a.heightIn[1]) * 2) / 2; S.weightLb = Math.round(a.weightLb[0] + g() * a.weightLb[1]);
+}
+function randomFace() {
+  S.faceSeed = randSeed(); S.shapeOverrides = {};
+  const f = resolveFace({ seed: S.faceSeed });        // the generator's own choices for this seed
+  Object.assign(S, { skinTone: f.skinTone, hairStyle: f.hairStyle, hairColour: f.hairColour, beard: f.beard });
+}
+$('rndBody').onclick = () => { randomBody(); build(); };
+$('rndFace').onclick = () => { randomFace(); build(); };
+$('rndAll').onclick = () => { randomBody(); randomFace(); S.number = Math.floor(Math.random() * 99); build(); };
+$('resetBtn').onclick = () => { S = structuredClone(DEFAULT); build(); };
+$('exportBtn').onclick = async () => {
+  // the persistable appearance: RESOLVED values + versions (what a saved roster would store)
+  const out = { schemaVersion: 1, faceVersion: FACE_VERSION, position: S.position, number: S.number, name: S.name,
+    body: built.body, face: built.face, uniform: { primary: S.primary, secondary: S.secondary, helmet: S.helmetc, facemask: S.mask, set: S.uniform } };
+  const txt = JSON.stringify(out, null, 1);
+  $('json').style.display = 'block'; $('json').value = txt;
+  try { await navigator.clipboard.writeText(txt); $('exportBtn').textContent = 'Copied ✓'; setTimeout(() => ($('exportBtn').textContent = 'Copy appearance JSON'), 1500); } catch {}
+};
+
+// --- camera ------------------------------------------------------------------------------
+function setCam(c) {
+  const h = rig ? rig.heightM : 1.85;
+  const presets = {
+    full: [[1.9, h * 0.62, 4.4], [0, h * 0.5, 0], 30], head: [[0.6, h * 0.94, 1.45], [0, h * 0.9, 0], 30],
+    side: [[4.6, h * 0.55, 0.01], [0, h * 0.5, 0], 30], broadcast: [[0, 13, 30], [0, 0.9, 0], 8],
+  };
+  const [p, t, fov] = presets[c];
+  camera.position.set(...p); controls.target.set(...t); camera.fov = fov; camera.updateProjectionMatrix();
+  for (const b of document.querySelectorAll('[data-cam]')) b.classList.toggle('on', b.dataset.cam === c);
+}
+for (const b of document.querySelectorAll('[data-cam]')) b.onclick = () => setCam(b.dataset.cam);
+
+function info() {
+  const b = built.body, f = built.face;
+  const tris = rig.meshes.reduce((n, m) => n + m.geometry.attributes.position.count / 3, 0);
+  $('info').textContent = `${S.position} · ${b.archetype.replace('_', ' ')} · ${ftin(b.heightIn)} ${Math.round(b.weightLb)} lb\n` +
+    `face: ${f.hairStyle} hair, ${f.beard === 'none' ? 'no beard' : f.beard}, skin ${f.skinTone + 1}/7\n` +
+    `${tris} body triangles${S.helmet === 'on' ? ' + 858 helmet' : ''}`;
+}
+function resize() {
+  const w = innerWidth - 330;
+  renderer.setSize(w, innerHeight); renderer.domElement.style.marginLeft = '330px';
+  camera.aspect = w / innerHeight; camera.updateProjectionMatrix();
+}
+addEventListener('resize', resize);
+
+// URL ?random=1 starts with a random player; ?cam= picks the camera; ?t= fixed time (headless)
+if (new URLSearchParams(location.search).get('random') === '1') { randomBody(); randomFace(); }
+build(); resize();
+setCam(new URLSearchParams(location.search).get('cam') || 'full');
+const fixedT = new URLSearchParams(location.search).get('t');
+if (fixedT != null) {
+  for (let t = 0; t < +fixedT; t += 1 / 60) applyPose(1 / 60);
+  controls.update(); renderer.render(scene, camera); window.__ready = true;
+} else {
+  let last = performance.now();
+  renderer.setAnimationLoop((now) => {
+    const dt = Math.min(0.05, (now - last) / 1000) * S.speed; last = now;
+    applyPose(dt); controls.update(); renderer.render(scene, camera);
+  });
+  window.__ready = true;
+}
+window.creator = { S, build, setCam, get rig() { return rig; } };
+</script>
+</body>
+</html>

@@ -9,6 +9,7 @@ python3 -m http.server 8000   →  http://localhost:8000/
 ```
 * `?nosim` starts the engine with no demo driver (an empty field for your sim).
 * `?classic` uses the previous code-built players instead of the character-system players (`src/engine/characters/`, see `docs/character_system/` and `analysis/M1_REPORT.md`). Option: `new FootballEngine(el, { playerModel: 'classic' })`.
+* **Character creator:** `tools/creator/`: sliders for height, weight, position, body proportions, face shape, hair, beard, skin, uniform colours, helmet on/off and poses; exports the saved-appearance JSON.
 * Character tools: `tools/compare/` (Meshy vs procedural), `tools/poses/` (poses, lineups, `helmet=1`, `faces=1`), `tools/portraits/` (player cards).
 * `lineup.html` previews generated players: the six test bodies, same-size seed variation, or a custom player with sliders. It runs the real animator (`pose=run|sprint|3pt|block|…`, `uniform=home|away|alt`, `cam=front|side|back|3q`).
 * Keys: `1-4` camera modes, `Space` pause, `[` `]` slow-mo.

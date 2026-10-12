@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Mesh check</title>
+<style>html,body{margin:0;height:100%;overflow:hidden;background:#c3c8cf;font:13px system-ui}#l{position:fixed;left:10px;top:8px;color:#1a2030;font-weight:600}</style>
+<script type="importmap">{ "imports": { "three": "../../vendor/three/three.module.js", "three/addons/": "../../vendor/three/addons/" } }</script>
+</head>
+<body><div id="l"></div>
+<script type="module">
+// ?file=../../assets/meshy/source/x.glb &mode=asis|clay|flat|creases &view=front|threequarter|side &zoom=1 &ty=0
+// asis    = the file's own material and normals
+// clay    = plain grey with the file's own normals (shows normal problems)
+// flat    = plain grey, true face normals (shows triangles that aren't coplanar)
+// creases = flat + magenta lines on edges bent 1–8° (meant to be flat), red = open / non-manifold
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+const q = new URLSearchParams(location.search);
+const mode = q.get('mode') || 'asis';
+const r = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+r.setSize(innerWidth, innerHeight); r.outputColorSpace = THREE.SRGBColorSpace; r.toneMapping = THREE.NeutralToneMapping;
+document.body.appendChild(r.domElement);
+const scene = new THREE.Scene(); scene.background = new THREE.Color('#c3c8cf');
+scene.add(new THREE.HemisphereLight('#f2f6ff', '#6d8a58', 1.7));
+const sun = new THREE.DirectionalLight('#fffaf0', 2.5); sun.position.set(3, 6, 5); scene.add(sun);
+const gltf = await new GLTFLoader().loadAsync(q.get('file'));
+const mesh = gltf.scene.getObjectByProperty('isMesh', true);
+const box = new THREE.Box3().setFromObject(gltf.scene);
+scene.add(gltf.scene);
+if (mode !== 'asis') {
+  mesh.material = new THREE.MeshStandardMaterial({ color: '#d9d9de', roughness: 0.8, flatShading: mode !== 'clay', side: THREE.DoubleSide });
+}
+if (mode === 'creases') {
+  // weld, then classify every interior edge by the angle between its two faces
+  const p = mesh.geometry.attributes.position, idx = mesh.geometry.index.array;
+  const key = (i) => [p.getX(i), p.getY(i), p.getZ(i)].map(v => Math.round(v * 1e5)).join(',');
+  const id = new Map(), w = [];
+  for (let i = 0; i < p.count; i++) { const k = key(i); if (!id.has(k)) id.set(k, id.size); w.push(id.get(k)); }
+  const faces = [], edges = new Map(), v = (i) => new THREE.Vector3().fromBufferAttribute(p, i);
+  for (let f = 0; f < idx.length / 3; f++) {
+    const [a, b, c] = [idx[f * 3], idx[f * 3 + 1], idx[f * 3 + 2]];
+    faces.push(new THREE.Vector3().subVectors(v(b), v(a)).cross(new THREE.Vector3().subVectors(v(c), v(a))).normalize());
+    for (const [i, j] of [[a, b], [b, c], [c, a]]) {
+      const k = Math.min(w[i], w[j]) + ':' + Math.max(w[i], w[j]);
+      if (!edges.has(k)) edges.set(k, { i, j, f: [] }); edges.get(k).f.push(f);
+    }
+  }
+  const soft = [], bad = [];
+  for (const e of edges.values()) {
+    if (e.f.length !== 2) { bad.push(v(e.i), v(e.j)); continue; }
+    const ang = THREE.MathUtils.radToDeg(faces[e.f[0]].angleTo(faces[e.f[1]]));
+    if (ang > 1 && ang <= 8) soft.push(v(e.i), v(e.j));
+  }
+  const lines = (pts, color) => new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineBasicMaterial({ color, depthTest: true }));
+  const g = new THREE.Group(); g.add(lines(soft, '#e01890'), lines(bad, '#ff2010'));
+  g.position.copy(mesh.getWorldPosition(new THREE.Vector3())); scene.add(g);
+  g.traverse(o => { if (o.material) { o.material.polygonOffset = true; } });
+  mesh.material.polygonOffset = true; mesh.material.polygonOffsetFactor = 1; mesh.material.polygonOffsetUnits = 1;
+  document.getElementById('l').textContent = `magenta: ${soft.length / 2} edges bent 1–8° (meant to be flat) · red: ${bad.length / 2} open / non-manifold`;
+}
+const size = box.getSize(new THREE.Vector3()), c = box.getCenter(new THREE.Vector3());
+const zoom = +(q.get('zoom') ?? 1), ty = +(q.get('ty') ?? 0);
+const cam = new THREE.OrthographicCamera(); const h = size.y * 0.55 / zoom, a = innerWidth / innerHeight;
+Object.assign(cam, { left: -h * a, right: h * a, top: h, bottom: -h, near: 0.01, far: 100 }); cam.updateProjectionMatrix();
+const dirs = { front: [0, 0, 1], threequarter: [0.6, 0.15, 0.78], side: [1, 0, 0], back: [0, 0, -1] };
+const d = new THREE.Vector3(...(dirs[q.get('view')] || dirs.front)).normalize();
+const t = c.clone().add(new THREE.Vector3(0, ty, 0)); cam.position.copy(t).addScaledVector(d, 10); cam.lookAt(t);
+r.render(scene, cam); window.__ready = true;
+</script></body></html>

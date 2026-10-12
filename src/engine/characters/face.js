@@ -21,7 +21,7 @@ export const HAIR_COLOURS = ['#1b1210', '#2e1518', '#4a2c1c', '#6b4429', '#9c6b3
 // (black, near-black, dark brown, brown, light brown, blond, red, grey)
 
 /** Shape controls: 1 / 0 = the measured medium head. Ranges kept narrow so every face stays in the art style. */
-const SHAPE = {
+export const FACE_SHAPE_RANGES = {
   headWidth: [0.94, 1.06], headLength: [0.96, 1.04], jawWidth: [0.88, 1.12], chin: [-1, 1],
   browHeight: [-1, 1], browTilt: [-1, 1], browThick: [0.7, 1.2], eyeSpacing: [0.9, 1.1], eyeSize: [0.85, 1.15],
   noseWidth: [0.8, 1.25], noseLength: [0.85, 1.15], mouthWidth: [0.8, 1.2], earSize: [0.85, 1.2],
@@ -30,7 +30,7 @@ const SHAPE = {
 export const DEFAULT_FACE = Object.freeze({
   version: FACE_VERSION, seed: null,
   skinTone: null, skin: '#ffaf68', hairStyle: 'short', hairColour: '#2e1518', beard: 'none',
-  shape: Object.freeze(Object.fromEntries(Object.keys(SHAPE).map(k => [k, ['chin', 'browHeight', 'browTilt'].includes(k) ? 0 : 1]))),
+  shape: Object.freeze(Object.fromEntries(Object.keys(FACE_SHAPE_RANGES).map(k => [k, ['chin', 'browHeight', 'browTilt'].includes(k) ? 0 : 1]))),
 });
 
 const pick = (rand, items, weights) => {
@@ -57,7 +57,7 @@ export function resolveFace(o = {}) {
   const hairStyle = pick(rand, HAIR_STYLES, [3.5, 2.5, 1.2, 1.5 + 2 * dark, 0.8]);
   const beard = pick(rand, BEARDS, [4.5, 2.5, 1.2, 0.6, 1.2]);
   const shape = {};
-  for (const [k, [a, b]] of Object.entries(SHAPE)) {
+  for (const [k, [a, b]] of Object.entries(FACE_SHAPE_RANGES)) {
     const t = (rand() + rand()) / 2;                        // triangular: most faces near the middle
     shape[k] = +(a + (b - a) * t).toFixed(3);
   }
