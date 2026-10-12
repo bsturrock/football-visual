@@ -35,9 +35,14 @@ const _q = new THREE.Quaternion(), _q2 = new THREE.Quaternion(), _qp = new THREE
 const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _d = new THREE.Vector3(), _v = new THREE.Vector3();
 
 export class PlayerRigFactory {
-  /** @param gltf loaded GLTF of base-medium-rigged.glb */
-  constructor(gltf) {
+  /**
+   * @param gltf        loaded GLTF of base-medium-rigged.glb (body, no helmet)
+   * @param helmetGltf  loaded GLTF of helmet.glb (origin at the head joint)
+   */
+  constructor(gltf, helmetGltf) {
     this.gltf = gltf;
+    this.helmet = helmetGltf?.scene || null;
+    if (this.helmet) this.helmet.traverse(o => { if (o.isMesh) { o.castShadow = true; o.material = new THREE.MeshStandardMaterial({ map: o.material.map, flatShading: true, roughness: 0.95, metalness: 0 }); } });
     let mesh;
     gltf.scene.traverse(o => { if (o.isSkinnedMesh) mesh = o; });
     this.mesh = mesh;
@@ -54,7 +59,7 @@ export class PlayerRigFactory {
    *   `bones` / `leg` / root / tilt / yaw follow the game rig interface, so the
    *   engine's Animator can drive it directly; call update() after animating.
    */
-  create(body, material) {
+  create(body, material, opts = {}) {
     const S = bodyScales(body);
 
     // --- model: clone, reshape geometry, move joints with the same mapping, re-bind
@@ -99,7 +104,19 @@ export class PlayerRigFactory {
     };
     yaw.add(model);
 
-    const rig = { root, tilt, yaw, bones: P, leg, model, mesh, body, scales: S, pairs: [], update: null };
+    // --- helmet + placeholder head, rigidly attached to the head bone (they never scale with weight)
+    const headRest = new THREE.Matrix4().copy(B.head.matrixWorld).invert();
+    const attach = (obj, offset) => {
+      obj.applyMatrix4(new THREE.Matrix4().multiplyMatrices(headRest, new THREE.Matrix4().makeTranslation(target.head.x + offset.x, target.head.y + offset.y, target.head.z + offset.z)));
+      B.head.add(obj);
+      return obj;
+    };
+    const helmet = this.helmet ? attach(this.helmet.clone(), new THREE.Vector3()) : null;
+    const head = attach(placeholderHead(opts.skin || '#c68b62'), new THREE.Vector3(0, 0.1, 0.01));
+    if (helmet) helmet.visible = opts.helmet !== false;
+
+    const rig = { root, tilt, yaw, bones: P, leg, model, mesh, helmet, head, body, scales: S, pairs: [], update: null };
+    rig.setHelmet = (on) => { if (helmet) helmet.visible = on; };
     const bindPose = Object.values(B).map(b => [b, b.position.clone(), b.quaternion.clone()]);
     this._bind(rig, B, target);
     rig.update = () => this._update(rig, B);
@@ -144,4 +161,18 @@ export class PlayerRigFactory {
       pr.b.updateMatrixWorld(true);
     }
   }
+}
+
+/** Simple boxy head shown with the helmet off (placeholder until seeded faces/hair). */
+function placeholderHead(skin) {
+  const g = new THREE.Group();
+  const mat = new THREE.MeshStandardMaterial({ color: skin, flatShading: true, roughness: 0.95 });
+  const dark = new THREE.MeshStandardMaterial({ color: '#1d1f26', flatShading: true, roughness: 0.95 });
+  const add = (w, h, d, x, y, z, m) => { const b = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m); b.position.set(x, y, z); b.castShadow = true; g.add(b); };
+  add(0.2, 0.24, 0.22, 0, 0, 0, mat);                 // head
+  add(0.21, 0.07, 0.2, 0, 0.11, -0.012, dark);        // short hair
+  for (const s of [-1, 1]) add(0.035, 0.022, 0.01, s * 0.048, 0.025, 0.111, dark);   // eyes
+  add(0.06, 0.012, 0.01, 0, -0.055, 0.111, dark);     // mouth
+  add(0.11, 0.08, 0.13, 0, -0.14, 0, mat);            // neck
+  return g;
 }

@@ -1,5 +1,5 @@
 """
-Milestone 2: rig the prepared base player.
+Milestone 2: rig the prepared base player (the fused helmet is removed; see prep_helmet.py).
 
     python3 characters/tools/rig_base.py -- characters/assets/base-medium.glb characters/assets/base-medium-rigged.glb
 
@@ -67,6 +67,12 @@ bm = bmesh.new(); bm.from_mesh(mesh.data)
 bmesh.ops.remove_doubles(bm, verts=bm.verts, dist=1e-5)
 bm.to_mesh(mesh.data); bm.free()
 for p in mesh.data.polygons: p.use_smooth = False
+# the helmet is a separate asset (prep_helmet.py) attached to the head bone: remove the fused one
+bm = bmesh.new(); bm.from_mesh(mesh.data)
+helmet = [f for f in bm.faces if all(v.co.z > 1.49 and abs(v.co.x) < 0.21 for v in f.verts)]
+bmesh.ops.delete(bm, geom=helmet, context='FACES')
+bm.to_mesh(mesh.data); bm.free()
+print(f'removed fused helmet: {len(helmet)} faces')
 
 arm_data = bpy.data.armatures.new('rig')
 arm = bpy.data.objects.new('rig', arm_data)

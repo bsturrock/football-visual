@@ -79,12 +79,24 @@ python3 characters/tools/rig_base.py -- characters/assets/base-medium.glb charac
 Known: neck has almost no own vertices (helmet + collar are weighted to head/chest), fine for now;
 forearms can clip the chest in the block pose.
 
-## Next: Milestone 2.5 (separate helmet, head, facemask)
+## Milestone 2.5: separate helmet (in progress)
 
-1. Split the helmet from the body; attach it to the head bone. Helmet on/off in the viewer.
-2. Simple boxy head under it; seeded faces (eyes, brows, mouth as flat blocks).
-3. New facemask built from `docs/reference/facemask.png` as its own part (frame, one cross bar,
-   three short verticals, chamfered chin bar). Opens the door to facemask/helmet variants.
-4. Seeded hair and facial hair pieces (blocky), hair colour palette.
+```
+python3 characters/tools/prep_helmet.py -- characters/source/helmet.glb characters/assets/helmet.glb
+```
+
+- **Helmet** (`source/helmet.glb` from Meshy, 408 tris, hollow, facemask matching
+  `docs/reference/facemask.png`): mirrored for exact symmetry (the −X half, whose facemask has the
+  two large + two narrow lower openings), shell pushed toward a rounded box (`BOXY=0.6`, facemask
+  untouched), scaled to the body's old helmet (0.36 m wide, bottom at 1.48 m, mask front 0.18 m
+  ahead), origin at the head joint. 570 tris, 0 bad edges.
+- **Body:** `rig_base.py` removes the fused helmet (390 faces) before weighting.
+- **Runtime:** helmet and a placeholder boxy head are attached rigidly to the head bone (fixed
+  size on every body). The head shows through the visor. Viewer: **Helmet** checkbox (`helmet=0`).
+
+### Still to do in 2.5
+1. Seeded faces (eyes, brows, mouth) and hair / facial hair pieces to replace the placeholder head.
+2. Helmet team colours (stripe, shell, mask) recoloured per uniform.
+3. Tune: helmet boxiness, head size inside the helmet.
 
 Then Milestones 3–4 (body tuning, 20-linebacker variation test), 5 (22 players in the game).
