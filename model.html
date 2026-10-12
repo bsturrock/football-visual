@@ -1,0 +1,24 @@
+<!doctype html><html><head><style>html,body{margin:0;background:#b9bfc9}</style>
+<script type="importmap">{"imports":{"three":"./vendor/three/three.module.js","three/addons/":"./vendor/three/addons/"}}</script></head>
+<body><script type="module">
+import * as THREE from 'three';
+import { createPlayerRig } from './src/engine/PlayerModel.js';
+import { DEFAULT_TEAMS } from './src/engine/Engine.js';
+const q=new URLSearchParams(location.search);
+const r=new THREE.WebGLRenderer({antialias:true,preserveDrawingBuffer:true});r.setSize(innerWidth,innerHeight);
+r.outputColorSpace=THREE.SRGBColorSpace;r.toneMapping=THREE.NeutralToneMapping;r.shadowMap.enabled=true;document.body.appendChild(r.domElement);
+const s=new THREE.Scene();s.background=new THREE.Color('#b9bfc9');
+s.add(new THREE.HemisphereLight('#f2f6ff','#8a8f98',1.7));
+const d=new THREE.DirectionalLight('#fffaf0',2.4);d.position.set(-3,6,6);d.castShadow=true;s.add(d);
+const g=new THREE.Mesh(new THREE.PlaneGeometry(40,40).rotateX(-Math.PI/2),new THREE.MeshLambertMaterial({color:'#c3c8d0'}));g.receiveShadow=true;s.add(g);
+const builds=(q.get('b')||'line').split(',');const rigs=builds.map((bb,i)=>{const rr=createPlayerRig({team:i%2&&q.get('mix')?DEFAULT_TEAMS.away:DEFAULT_TEAMS.home,build:bb,skin:['#c98a5e','#8a5230','#f0c3a0','#6b3e22'][i%4]});rr.root.position.x=(i-(builds.length-1)/2)*1.25;s.add(rr.root);return rr;});
+for(const rig of rigs){const b=rig.bones;
+// idle pose (mirrors Animator idle)
+b.shL.rotation.set(0.05,0,0.3);b.shR.rotation.set(0.05,0,-0.3);b.elL.rotation.x=-0.35;b.elR.rotation.x=-0.35;
+b.hipL.rotation.set(-0.08,0,0.12);b.hipR.rotation.set(-0.08,0,-0.12);b.knL.rotation.x=0.16;b.knR.rotation.x=0.16;b.ankL.rotation.set(-0.08,0,-0.12);b.ankR.rotation.set(-0.08,0,0.12);
+b.spine.rotation.x=0.06;b.neck.rotation.x=0.1;
+b.pelvis.position.y-=0.03;
+rig.yaw.rotation.y=0.35;}
+const c=new THREE.PerspectiveCamera(30,innerWidth/innerHeight,0.1,100);if(q.get('cam')==='head'){c.position.set(0.3,2.0,2.2);c.lookAt(0,1.85,0);}else{c.position.set(0,1.45,5.2*Math.max(1,builds.length*0.62));c.lookAt(0,1.05,0);}
+r.render(s,c);
+</script></body></html>

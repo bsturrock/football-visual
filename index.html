@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Gridiron Engine — Low Poly Football</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    html, body { margin: 0; height: 100%; overflow: hidden; background: #a9b3bf; }
+    #app { position: fixed; inset: 0; }
+    #help { position: fixed; left: 12px; bottom: 10px; color: #fff; font: 600 12px/1.5 'Oswald', sans-serif; letter-spacing: .04em;
+      background: rgba(21,27,43,.7); padding: 6px 10px; border-radius: 3px; pointer-events: none; }
+  </style>
+  <script type="importmap">
+    { "imports": {
+        "three": "./vendor/three/three.module.js",
+        "three/addons/": "./vendor/three/addons/"
+    } }
+  </script>
+</head>
+<body>
+  <div id="app"></div>
+  <div id="help">1 BROADCAST · 2 HIGH · 3 END ZONE · 4 FIELD &nbsp;|&nbsp; SPACE PAUSE · [ ] SLOW-MO</div>
+  <script type="module" src="./src/main.js"></script>
+</body>
+</html>
