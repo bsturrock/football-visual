@@ -64,7 +64,6 @@
     <option value="front">Front</option><option value="3q">3/4</option><option value="side">Side (left)</option><option value="side2">Side (right)</option>
     <option value="back">Back</option><option value="broadcast">Broadcast distance</option>
   </select></label>
-  <label>Helmet <input id="helmet" type="checkbox" checked></label>
   <label>Wireframe <input id="wire" type="checkbox"></label>
   <label>Height ruler <input id="ruler" type="checkbox" checked></label>
   <div class="stats" id="stats">loading…</div>
@@ -127,8 +126,7 @@ const ruler = new THREE.Group();
 
 // --- base asset ---------------------------------------------------------------------
 const gltf = await new GLTFLoader().loadAsync('./assets/base-medium-rigged.glb');
-const helmetGltf = await new GLTFLoader().loadAsync('./assets/helmet.glb');
-const factory = new PlayerRigFactory(gltf, helmetGltf);
+const factory = new PlayerRigFactory(gltf);
 const baseGeo = factory.baseGeometry;
 const baseTex = factory.mesh.material.map;
 const tris = (baseGeo.index ? baseGeo.index.count : baseGeo.attributes.position.count) / 3;
@@ -140,7 +138,7 @@ const state = {
   view: q.get('view') || 'single', cam: q.get('cam') || 'front', wire: q.has('wire'),
   position: q.get('position') || 'LB', height: +(q.get('h') || 74), weight: +(q.get('w') || 245),
   seed: +(q.get('seed') || 14), skin: q.has('skin') ? +q.get('skin') : 3,
-  pose: q.get('pose') || 'idle', helmet: q.get('helmet') !== '0', speed: q.has('speed') ? +q.get('speed') : 1,
+  pose: q.get('pose') || 'idle', speed: q.has('speed') ? +q.get('speed') : 1,
 };
 SKIN_TONES.forEach((c, i) => {
   const sp = document.createElement('span'); sp.style.background = c; sp.title = c;
@@ -162,7 +160,7 @@ let objects = [], labels = [];
 function makePlayer(spec, x) {
   const body = resolveBody(spec);
   const mat = new THREE.MeshStandardMaterial({ map: skinTexture(baseTex, SKIN_TONES[state.skin]), flatShading: true, roughness: 0.95, metalness: 0, wireframe: false });
-  const rig = factory.create(body, mat, { skin: SKIN_TONES[state.skin], helmet: state.helmet });
+  const rig = factory.create(body, mat);
   const geo = rig.mesh.geometry;
   rig.root.position.x = x;
   scene.add(rig.root);
@@ -265,14 +263,13 @@ function build() {
 }
 
 function syncInputs() {
-  $('helmet').checked = state.helmet; $('pose').value = state.pose; $('speed').value = String(state.speed);
+  $('pose').value = state.pose; $('speed').value = String(state.speed);
   $('view').value = state.view; $('cam').value = state.cam; $('wire').checked = state.wire;
   $('position').value = state.position; $('height').value = state.height; $('weight').value = state.weight; $('seed').value = state.seed;
   $('heightV').textContent = `${Math.floor(state.height / 12)}'${(state.height % 12).toFixed(state.height % 1 ? 1 : 0)}"`;
   $('weightV').textContent = `${state.weight} lb`;
 }
 
-$('helmet').onchange = () => { state.helmet = $('helmet').checked; for (const o of objects) o.rig?.setHelmet(state.helmet); };
 $('pose').onchange = () => { state.pose = $('pose').value; };
 $('speed').onchange = () => { state.speed = +$('speed').value; };
 $('view').onchange = () => { state.view = $('view').value; if (state.view === 'compare') state.cam = 'front'; build(); };

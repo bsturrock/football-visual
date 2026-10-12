@@ -80,26 +80,21 @@ python3 characters/tools/rig_base.py -- characters/assets/base-medium.glb charac
 Known: neck has almost no own vertices (helmet + collar are weighted to head/chest), fine for now;
 forearms can clip the chest in the block pose.
 
-## Milestone 2.5: separate helmet (in progress)
+## Facemask update ✅
 
-```
-python3 characters/tools/prep_helmet.py -- characters/source/helmet.glb characters/assets/helmet.glb
-```
+The original helmet on the base model is kept exactly as modelled. Only its facemask is replaced, by
+the facemask from the provided helmet (`source/helmet.glb`, which matches `docs/reference/facemask.png`):
 
-- **Helmet** (`source/helmet.glb` from Meshy, 408 tris, hollow, facemask matching
-  `docs/reference/facemask.png`): mirrored for exact symmetry (the −X half, whose facemask has the
-  two large + two narrow lower openings),
-  scaled to the body's old helmet (0.36 m wide, bottom at 1.48 m, mask front 0.18 m ahead), origin at
-  the head joint. Otherwise used exactly as modelled: the provided mesh is the reference (an earlier
-  "boxier" reshape was reverted). 570 tris, 0 bad edges.
-- **Body:** `rig_base.py` removes the fused helmet (390 faces) before weighting.
-- **Runtime:** helmet and a placeholder boxy head are attached rigidly to the head bone (fixed
-  size on every body). The placeholder head is only shown with the helmet off. Viewer: **Helmet**
-  checkbox (`helmet=0`).
+- `prep_base.py` takes the facemask faces from `helmet.glb` (frame, cross bar, lower bars, side bars;
+  129 faces), scales them uniformly to the old facemask's width (×0.26), aligns bottom and centre, and
+  sets them 5 cm forward so the whole mask sits in front (as on the provided helmet). It's flipped in X
+  so the half with the reference layout (two large + two narrow lower openings) is the one mirrored.
+- The old cross bar + cage (71 faces) are painted dark, so they read as shadow behind the new bars;
+  no holes are cut in the original helmet.
+- The facemask is white (body texture) and weighted to the head by the rig step.
 
-### Still to do in 2.5
-1. Seeded faces (eyes, brows, mouth) and hair / facial hair pieces to replace the placeholder head.
-2. Helmet team colours (stripe, shell, mask) recoloured per uniform.
-3. A real head that fits inside the helmet (so a face can show through the visor without poking through).
+## Next (to agree)
 
-Then Milestones 3–4 (body tuning, 20-linebacker variation test), 5 (22 players in the game).
+- A separate helmet item (helmet on/off), heads, faces and hair were discussed; on hold until
+  agreed. If done, the original helmet stays the reference.
+- Then Milestones 3–4 (body tuning, 20-linebacker variation test), 5 (22 players in the game).

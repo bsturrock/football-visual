@@ -6,7 +6,8 @@ Milestone 1: clean the medium base player and export it for Three.js.
 
 The source file is never modified. Steps:
   - weld UV-seam vertex splits into one connected mesh (needed for skinning later)
-  - fix the source: dark paint at the outer ends of the lower facemask -> white; back of neck -> skin
+  - facemask: replaced by the facemask from characters/source/helmet.glb (rest of the helmet kept);
+    back of neck -> skin
   - exact left/right symmetry: keep the +X half and mirror it (MIRROR_KEEP=-1 keeps -X)
   - consistent outward normals, flat shading
   - matte material: base colour only (drop the metallic/roughness map), texture <= 1024 px
@@ -70,14 +71,51 @@ def ref_uv(kind, where):
 
 SKIN_UV = ref_uv('skin', lambda c: 0.45 < c.z < 0.62 and c.y < 0 and abs(c.x) < 0.12)
 
-# 1. facemask: faces at the outer ends of the lower mask (where it joins the helmet) are painted
-#    dark in the texture and read as holes -> recolour white. Geometry is left as modelled.
+# 1. facemask: the original helmet is kept as modelled; only its facemask is replaced by the one
+#    from the provided helmet (characters/source/helmet.glb). The old cross bar + cage are painted
+#    dark (they read as shadow behind the new bars, no holes cut), and the new facemask is fitted to
+#    the old one's footprint (same width, front and bottom), coloured white.
 WHITE_UV = ref_uv('white', lambda c: c.z > 0.8)
-mask_dark = [f for f in bm.faces
-             if 0.07 <= f.calc_center_median().x <= 0.17 and 0.58 <= f.calc_center_median().z <= 0.74
-             and -0.2 <= f.calc_center_median().y <= -0.05 and colour(f) == 'dark']
-for f in mask_dark:
-    for l in f.loops: l[uvl].uv = WHITE_UV
+DARK_UV = ref_uv('dark', lambda c: c.z > 0.7 and c.y < 0)
+OLD_MASK = dict(z0=0.585, z1=0.80, x1=0.16, y1=-0.10)
+old_mask = [f for f in bm.faces if all(OLD_MASK['z0'] <= v.co.z <= OLD_MASK['z1'] and abs(v.co.x) <= OLD_MASK['x1']
+                                       and v.co.y <= OLD_MASK['y1'] for v in f.verts)]
+ov = {v for f in old_mask for v in f.verts}
+old_lo = Vector([min(v.co[i] for v in ov) for i in range(3)])
+old_hi = Vector([max(v.co[i] for v in ov) for i in range(3)])
+for f in old_mask:
+    for l in f.loops: l[uvl].uv = DARK_UV
+
+HELMET_SRC = os.path.join(os.path.dirname(os.path.abspath(src)), 'helmet.glb')
+before = set(bpy.data.objects)
+bpy.ops.import_scene.gltf(filepath=HELMET_SRC)
+hobj = next(o for o in bpy.data.objects if o not in before and o.type == 'MESH')
+hm = bmesh.new(); hm.from_mesh(hobj.data)
+bmesh.ops.remove_doubles(hm, verts=hm.verts, dist=1e-4)
+mask_faces = [f for f in hm.faces if all(v.co.y < -0.38 and v.co.z < 0.12 for v in f.verts)]   # facemask (see README)
+mv = {v for f in mask_faces for v in f.verts}
+new_lo = Vector([min(v.co[i] for v in mv) for i in range(3)])
+new_hi = Vector([max(v.co[i] for v in mv) for i in range(3)])
+k = (old_hi.x - old_lo.x) / (new_hi.x - new_lo.x)                 # uniform scale: same width
+MASK_FORWARD = 0.05                                              # sit just in front of the old (dark) bars
+cx_new = (new_lo.x + new_hi.x) / 2
+def place(co):
+    # flip X so the mask's -X half (the one matching the reference) lands on +X, which the body
+    # symmetry step keeps and mirrors
+    return Vector((-(co.x - cx_new) * k, old_lo.y - MASK_FORWARD + (co.y - new_lo.y) * k, old_lo.z + (co.z - new_lo.z) * k))
+vmap = {v: bm.verts.new(place(v.co)) for v in mv}
+added = []
+for f in mask_faces:
+    nf = bm.faces.new([vmap[v] for v in reversed(f.verts)])      # reversed: X flip mirrors the winding
+    for l in nf.loops: l[uvl].uv = WHITE_UV
+    added.append(nf)
+hm.free()
+bpy.data.objects.remove(hobj, do_unlink=True)
+for o in bpy.data.objects:
+    o.select_set(o is obj)
+bpy.context.view_layer.objects.active = obj
+print(f'facemask: old {len(old_mask)} faces painted dark; new facemask {len(added)} faces, scale {k:.3f}, '
+      f'z {old_lo.z + (new_lo.z - new_lo.z) * k:.3f}..{old_lo.z + (new_hi.z - new_lo.z) * k:.3f} (old {old_lo.z:.3f}..{old_hi.z:.3f})')
 
 # 2. back of the neck: painted dark grey in the texture -> recolour as skin
 neck = [f for f in bm.faces if 0.45 < f.calc_center_median().z < 0.64 and f.calc_center_median().y > -0.02
@@ -94,7 +132,7 @@ bmesh.ops.mirror(bm, geom=bm.verts[:] + bm.edges[:] + bm.faces[:], matrix=Matrix
 bmesh.ops.remove_doubles(bm, verts=bm.verts, dist=1e-4)
 bmesh.ops.triangulate(bm, faces=[f for f in bm.faces if len(f.verts) > 3])
 print(f'symmetry: kept {"+X" if KEEP > 0 else "-X"} half, mirrored')
-print(f'fixes: facemask dark faces -> white {len(mask_dark)}; neck faces recoloured {len(neck)}')
+print(f'fixes: neck faces recoloured {len(neck)}')
 bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
 for f in bm.faces:
     f.smooth = False
