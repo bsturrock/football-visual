@@ -6,12 +6,23 @@
 <title>Player models</title>
 <style>
   html, body { margin: 0; height: 100%; background: #a9afba; font: 13px/1.35 system-ui, sans-serif; overflow: hidden; }
-  #ui { position: absolute; top: 10px; left: 10px; background: rgba(20, 24, 32, .84); color: #eef; padding: 10px 12px; border-radius: 8px; width: 230px; }
-  #ui h3 { margin: 2px 0 8px; font-size: 14px; }
+  #ui { position: absolute; top: 10px; left: 10px; background: rgba(20, 24, 32, .86); color: #eef; padding: 10px 12px; border-radius: 8px; width: 250px; max-height: calc(100% - 40px); overflow: auto; }
+  #ui h3 { margin: 2px 0 6px; font-size: 14px; }
+  #ui h4 { margin: 10px 0 4px; font-size: 12px; color: #aab4c8; text-transform: uppercase; letter-spacing: .04em; }
   #ui label { display: flex; justify-content: space-between; align-items: center; margin: 5px 0; gap: 8px; }
-  #ui select { width: 120px; }
+  #ui select { width: 130px; }
+  #ui input[type=range] { width: 110px; }
+  #ui input[type=number] { width: 80px; }
+  #ui .val { width: 54px; text-align: right; font-variant-numeric: tabular-nums; }
+  #ui .row { display: flex; gap: 6px; margin: 6px 0; flex-wrap: wrap; }
+  #ui button { flex: 1; padding: 3px 4px; }
+  #skins { display: flex; gap: 4px; margin: 4px 0; }
+  #skins span { width: 22px; height: 22px; border-radius: 4px; cursor: pointer; border: 2px solid transparent; }
+  #skins span.on { border-color: #fff; }
   #ui .stats { margin-top: 8px; padding-top: 8px; border-top: 1px solid #ffffff22; white-space: pre; font: 12px/1.45 ui-monospace, monospace; color: #cfd6e6; }
   #ui a { color: #9cc3ff; }
+  #labels { position: absolute; inset: 0; pointer-events: none; }
+  #labels div { position: absolute; transform: translate(-50%, 0); font: 600 12px system-ui; color: #1b2030; background: #ffffffb0; padding: 1px 6px; border-radius: 4px; white-space: nowrap; }
   body.capture #ui { display: none; }
 </style>
 <script type="importmap">{"imports":{"three":"../vendor/three/three.module.js","three/addons/":"../vendor/three/addons/"}}</script>
@@ -19,10 +30,27 @@
 <body>
 <div id="ui">
   <h3>Player models</h3>
-  <label>Model <select id="model">
-    <option value="base">Base medium (GLB)</option>
-    <option value="both">Base vs. current boxes</option>
+  <label>View <select id="view">
+    <option value="single">Single player</option>
+    <option value="test">Test lineup (6)</option>
+    <option value="seeds">Same size, 5 seeds</option>
+    <option value="compare">Base vs. current boxes</option>
   </select></label>
+
+  <div id="custom">
+    <h4>Player</h4>
+    <div class="row">
+      <button data-preset="RB">RB 5'8" 195</button><button data-preset="LB">LB 6'2" 245</button><button data-preset="OT">OT 6'6" 325</button>
+    </div>
+    <label>Position <select id="position"></select></label>
+    <label>Height <input id="height" type="range" min="67" max="81" step="0.5"><span class="val" id="heightV"></span></label>
+    <label>Weight <input id="weight" type="range" min="160" max="360" step="1"><span class="val" id="weightV"></span></label>
+    <label>Seed <input id="seed" type="number"><button id="rand" style="flex:0">🎲</button></label>
+  </div>
+  <h4>Skin tone</h4>
+  <div id="skins"></div>
+
+  <h4>Display</h4>
   <label>Camera <select id="cam">
     <option value="front">Front</option><option value="3q">3/4</option><option value="side">Side</option>
     <option value="back">Back</option><option value="broadcast">Broadcast distance</option>
@@ -32,20 +60,23 @@
   <div class="stats" id="stats">loading…</div>
   <div style="margin-top:8px"><a href="../">← back to the game</a></div>
 </div>
+<div id="labels"></div>
 <script type="module">
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { createPlayerRig } from '../src/engine/PlayerModel.js';
-import { resolveBody } from '../src/engine/Body.js';
+import { resolveBody, POSITION_ARCHETYPE } from '../src/engine/Body.js';
+import { SKIN_TONES } from '../src/engine/constants.js';
+import { createPlayerRig, disposeRig } from '../src/engine/PlayerModel.js';
 import { resolveKit } from '../src/engine/Uniforms.js';
 import { DEFAULT_TEAMS } from '../src/engine/Engine.js';
+import { reshape, skinTexture } from './src/BodyCustomizer.js';
 
 const q = new URLSearchParams(location.search);
 if (q.has('capture')) document.body.classList.add('capture');
 const $ = id => document.getElementById(id);
 
-// --- scene: same matte look as the game, units = metres here -------------------
+// --- scene (metres) ----------------------------------------------------------------
 const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.setSize(innerWidth, innerHeight);
@@ -58,95 +89,163 @@ scene.background = new THREE.Color('#a9afba');
 scene.add(new THREE.HemisphereLight('#f4f7ff', '#8a8f98', 1.9));
 const sun = new THREE.DirectionalLight('#fffaf0', 2.2);
 sun.position.set(-3, 7, 6); sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048);
-Object.assign(sun.shadow.camera, { left: -3, right: 3, top: 3, bottom: -1 });
+Object.assign(sun.shadow.camera, { left: -7, right: 7, top: 4, bottom: -1 });
 scene.add(sun);
-const ground = new THREE.Mesh(new THREE.PlaneGeometry(40, 40).rotateX(-Math.PI / 2), new THREE.MeshLambertMaterial({ color: '#b9bec8' }));
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(60, 60).rotateX(-Math.PI / 2), new THREE.MeshLambertMaterial({ color: '#b9bec8' }));
 ground.receiveShadow = true; scene.add(ground);
-const grid = new THREE.GridHelper(10, 20, '#8f96a3', '#a3a9b4'); grid.position.y = 0.001; scene.add(grid);
-
+const grid = new THREE.GridHelper(20, 40, '#8f96a3', '#a3a9b4'); grid.position.y = 0.001; scene.add(grid);
 const camera = new THREE.PerspectiveCamera(30, innerWidth / innerHeight, 0.05, 200);
 const controls = new OrbitControls(camera, renderer.domElement);
-controls.target.set(0, 0.95, 0);
 controls.enableDamping = true;
 
-// --- height ruler: tick every foot, label at 6'1" --------------------------------
+// height ruler: ticks every foot, red dashes at 6'1" (base) and 6'6"
 const ruler = new THREE.Group();
 {
-  const mat = new THREE.LineBasicMaterial({ color: '#2b3140' });
   const pts = [new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, 2.13, 0)];
   for (let ft = 0; ft <= 7; ft++) { const y = ft * 0.3048; pts.push(new THREE.Vector3(0, y, 0), new THREE.Vector3(0.06, y, 0)); }
-  ruler.add(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(pts), mat));
-  const ref = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, 1.854, 0), new THREE.Vector3(1.2, 1.854, 0)]),
-    new THREE.LineDashedMaterial({ color: '#c0392b', dashSize: 0.04, gapSize: 0.03 }));
-  ref.computeLineDistances(); ruler.add(ref);
-  ruler.position.set(-1.25, 0, 0);
+  ruler.add(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineBasicMaterial({ color: '#2b3140' })));
+  for (const [inches, col] of [[73, '#c0392b'], [78, '#7d3c98']]) {
+    const y = inches * 0.0254;
+    const l = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, y, 0), new THREE.Vector3(12, y, 0)]),
+      new THREE.LineDashedMaterial({ color: col, dashSize: 0.05, gapSize: 0.04 }));
+    l.computeLineDistances(); ruler.add(l);
+  }
   scene.add(ruler);
 }
 
-// --- models -----------------------------------------------------------------------
+// --- base asset ---------------------------------------------------------------------
 const gltf = await new GLTFLoader().loadAsync('./assets/base-medium.glb');
-const base = gltf.scene;
-let mesh;
-base.traverse(o => {
-  if (o.isMesh) {
-    mesh = o;
-    o.castShadow = true;
-    // flat-shaded matte, same settings the game uses
-    o.material = new THREE.MeshStandardMaterial({ map: o.material.map, flatShading: true, roughness: 0.95, metalness: 0 });
-  }
+let baseMesh;
+gltf.scene.traverse(o => { if (o.isMesh) baseMesh = o; });
+const baseGeo = baseMesh.geometry;
+const baseTex = baseMesh.material.map;
+const tris = (baseGeo.index ? baseGeo.index.count : baseGeo.attributes.position.count) / 3;
+
+// --- state ---------------------------------------------------------------------------
+for (const p of Object.keys(POSITION_ARCHETYPE)) $('position').add(new Option(p, p));
+const PRESETS = { RB: [68, 195], LB: [74, 245], OT: [78, 325] };
+const state = {
+  view: q.get('view') || 'single', cam: q.get('cam') || 'front', wire: q.has('wire'),
+  position: q.get('position') || 'LB', height: +(q.get('h') || 74), weight: +(q.get('w') || 245),
+  seed: +(q.get('seed') || 14), skin: q.has('skin') ? +q.get('skin') : 3,
+};
+SKIN_TONES.forEach((c, i) => {
+  const sp = document.createElement('span'); sp.style.background = c; sp.title = c;
+  sp.onclick = () => { state.skin = i; build(); };
+  $('skins').appendChild(sp);
 });
-scene.add(base);
-const wire = new THREE.LineSegments(new THREE.WireframeGeometry(mesh.geometry), new THREE.LineBasicMaterial({ color: '#000', transparent: true, opacity: 0.35 }));
-mesh.add(wire);
 
-// current procedural box player at the same height (game units are yards → metres)
-const boxRig = createPlayerRig({ body: resolveBody({ seed: 7, position: 'QB', heightIn: 73, weightLb: 225 }), kit: resolveKit(DEFAULT_TEAMS.home), skin: '#c68b62', number: 12, name: 'Box' });
-boxRig.root.scale.setScalar(0.9144);
-boxRig.bones.shL.rotation.z = Math.PI / 2; boxRig.bones.shR.rotation.z = -Math.PI / 2;
-scene.add(boxRig.root);
+// --- build players -------------------------------------------------------------------
+const TESTS = [
+  { label: "RB 5'8\" 195", position: 'RB', heightIn: 68, weightLb: 195, seed: 11 },
+  { label: "WR 6'1\" 195", position: 'WR', heightIn: 73, weightLb: 195, seed: 12 },
+  { label: "QB 6'4\" 225", position: 'QB', heightIn: 76, weightLb: 225, seed: 13 },
+  { label: "LB 6'2\" 245", position: 'LB', heightIn: 74, weightLb: 245, seed: 14 },
+  { label: "DE 6'5\" 270", position: 'DE', heightIn: 77, weightLb: 270, seed: 15 },
+  { label: "OT 6'6\" 325", position: 'OT', heightIn: 78, weightLb: 325, seed: 16 },
+];
+let objects = [], labels = [];
+const wireMat = new THREE.LineBasicMaterial({ color: '#000', transparent: true, opacity: 0.35 });
 
-const box3 = new THREE.Box3().setFromObject(base);
-const size = box3.getSize(new THREE.Vector3());
-const tris = (mesh.geometry.index ? mesh.geometry.index.count : mesh.geometry.attributes.position.count) / 3;
-const tex = mesh.material.map?.image;
-
-function apply() {
-  const both = $('model').value === 'both';
-  base.position.x = both ? -1.0 : 0;
-  boxRig.root.position.x = 1.0;
-  boxRig.root.visible = both;
-  wire.visible = $('wire').checked;
-  ruler.visible = $('ruler').checked;
-  ruler.position.x = both ? -2.2 : -1.25;
-  const v = $('cam').value;
-  const d = v === 'broadcast' ? 28 : (both ? 7.5 : 5.2);
-  const a = { front: 0, '3q': 0.6, side: Math.PI / 2, back: Math.PI, broadcast: 0.25 }[v];
-  const h = v === 'broadcast' ? 12 : 1.25;
-  camera.position.set(Math.sin(a) * d, h, Math.cos(a) * d);
-  controls.target.set(0, 0.95, 0);
-  controls.update();
+function makePlayer(spec, x) {
+  const body = resolveBody(spec);
+  const geo = reshape(baseGeo, body);
+  const mat = new THREE.MeshStandardMaterial({ map: skinTexture(baseTex, SKIN_TONES[state.skin]), flatShading: true, roughness: 0.95, metalness: 0 });
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.castShadow = true;
+  mesh.position.x = x;
+  if (state.wire) mesh.add(new THREE.LineSegments(new THREE.WireframeGeometry(geo), wireMat));
+  scene.add(mesh);
+  objects.push({ obj: mesh, dispose: () => { geo.dispose(); mat.dispose(); mesh.children.forEach(c => c.geometry.dispose()); } });
+  const ft = body.heightIn / 12;
+  const size = `${Math.floor(ft)}'${Math.round(body.heightIn % 12)}" ${Math.round(body.weightLb)}`;
+  labels.push({ x, y: geo.boundingBox.max.y + 0.08, text: spec.label || `${spec.position} ${size}` });
+  return { body, geo };
 }
-for (const id of ['cam', 'wire', 'ruler']) $(id).onchange = apply;
-$('model').onchange = () => { if ($('model').value === 'both') $('cam').value = 'front'; apply(); };
-if (q.get('model')) $('model').value = q.get('model');
-if (q.get('cam')) $('cam').value = q.get('cam');
-if (q.has('wire')) $('wire').checked = true;
-apply();
 
+function build() {
+  for (const o of objects) { scene.remove(o.obj); o.dispose(); }
+  objects = []; labels = [];
+  [...$('skins').children].forEach((s, i) => s.classList.toggle('on', i === state.skin));
+  $('custom').style.display = state.view === 'single' || state.view === 'compare' ? '' : 'none';
+  let span = 0;
+  if (state.view === 'test') {
+    const gap = 1.9;
+    TESTS.forEach((t, i) => makePlayer(t, (i - 2.5) * gap));
+    span = 6 * gap;
+  } else if (state.view === 'seeds') {
+    const gap = 2.0;
+    for (let i = 0; i < 5; i++) makePlayer({ label: `seed ${state.seed + i}`, position: state.position, heightIn: state.height, weightLb: state.weight, seed: state.seed + i }, (i - 2) * gap);
+    span = 5 * gap;
+  } else {
+    const spec = { position: state.position, heightIn: state.height, weightLb: state.weight, seed: state.seed };
+    const x = state.view === 'compare' ? -1.0 : 0;
+    const { body } = makePlayer(spec, x);
+    if (state.view === 'compare') {
+      const rig = createPlayerRig({ body, kit: resolveKit(DEFAULT_TEAMS.home), skin: SKIN_TONES[state.skin], number: 54, name: 'Box' });
+      rig.root.scale.setScalar(0.9144);                 // game yards → metres
+      rig.bones.shL.rotation.z = Math.PI / 2; rig.bones.shR.rotation.z = -Math.PI / 2;
+      rig.root.position.x = 1.0;
+      scene.add(rig.root);
+      objects.push({ obj: rig.root, dispose: () => disposeRig(rig) });
+      labels.push({ x: 1.0, y: body.heightIn * 0.0254 + 0.12, text: 'current boxes' });
+    }
+    span = state.view === 'compare' ? 4 : 2;
+  }
+  ruler.position.x = -span / 2 - 0.4;
+  const v = state.cam;
+  const d = v === 'broadcast' ? 30 : Math.max(5.2, span * 0.95 + 1.5);
+  const a = { front: 0, '3q': 0.55, side: Math.PI / 2, back: Math.PI, broadcast: 0.25 }[v];
+  const ox = -span * 0.08;  // leave room for the control panel on the left
+  camera.position.set(ox + Math.sin(a) * d, v === 'broadcast' ? 12 : 1.3, Math.cos(a) * d);
+  controls.target.set(ox, 0.95, 0);
+  controls.update();
+  $('labels').innerHTML = labels.map(() => '<div></div>').join('');
+  syncInputs();
+}
+
+function syncInputs() {
+  $('view').value = state.view; $('cam').value = state.cam; $('wire').checked = state.wire;
+  $('position').value = state.position; $('height').value = state.height; $('weight').value = state.weight; $('seed').value = state.seed;
+  $('heightV').textContent = `${Math.floor(state.height / 12)}'${(state.height % 12).toFixed(state.height % 1 ? 1 : 0)}"`;
+  $('weightV').textContent = `${state.weight} lb`;
+}
+
+$('view').onchange = () => { state.view = $('view').value; if (state.view === 'compare') state.cam = 'front'; build(); };
+$('cam').onchange = () => { state.cam = $('cam').value; build(); };
+$('wire').onchange = () => { state.wire = $('wire').checked; build(); };
+$('ruler').onchange = () => { ruler.visible = $('ruler').checked; };
+$('position').onchange = () => { state.position = $('position').value; build(); };
+$('height').oninput = () => { state.height = +$('height').value; build(); };
+$('weight').oninput = () => { state.weight = +$('weight').value; build(); };
+$('seed').onchange = () => { state.seed = +$('seed').value; build(); };
+$('rand').onclick = () => { state.seed = (Math.random() * 1e6) | 0; build(); };
+for (const b of document.querySelectorAll('[data-preset]')) b.onclick = () => {
+  const k = b.dataset.preset; state.position = k; [state.height, state.weight] = PRESETS[k]; build();
+};
+build();
+
+const _p = new THREE.Vector3();
+function placeLabels() {
+  const els = $('labels').children;
+  labels.forEach((l, i) => {
+    _p.set(l.x, l.y, 0).project(camera);
+    const el = els[i]; if (!el) return;
+    el.textContent = l.text;
+    el.style.left = `${(_p.x * 0.5 + 0.5) * innerWidth}px`;
+    el.style.top = `${(-_p.y * 0.5 + 0.5) * innerHeight}px`;
+    el.style.display = _p.z < 1 ? '' : 'none';
+  });
+}
 function stats() {
-  const ft = size.y / 0.3048;
   $('stats').textContent =
-    `triangles  ${tris}\n` +
-    `height     ${size.y.toFixed(3)} m (${Math.floor(ft)}'${Math.round((ft % 1) * 12)}")\n` +
-    `width      ${size.x.toFixed(2)} m (T-pose)\n` +
-    `depth      ${size.z.toFixed(2)} m\n` +
-    `feet at    y = ${box3.min.y.toFixed(3)}\n` +
-    `texture    ${tex ? tex.width + '×' + tex.height : 'none'}\n` +
+    `players    ${objects.length}\n` +
+    `triangles  ${tris} per player\n` +
+    `texture    ${baseTex.image.width}×${baseTex.image.height}\n` +
     `draw calls ${renderer.info.render.calls}`;
 }
-
 addEventListener('resize', () => { renderer.setSize(innerWidth, innerHeight); camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); });
-renderer.setAnimationLoop(() => { controls.update(); renderer.render(scene, camera); stats(); });
+renderer.setAnimationLoop(() => { controls.update(); renderer.render(scene, camera); placeLabels(); stats(); });
 window.__ready = true;
 </script>
 </body>

@@ -4,8 +4,11 @@ Work toward the asset-based player pipeline described in [`ARCHITECTURE.md`](ARC
 It lives in this folder and does not touch the live game: the game (`/`) still uses
 the procedural box players in `src/engine/`.
 
-- **Viewer:** `characters/index.html` (on Pages: `/characters/`). Orbit with the mouse,
-  pick camera presets, toggle wireframe and the height ruler, compare against the current box player.
+- **Viewer:** `characters/index.html` (on Pages: `/characters/`). Orbit with the mouse.
+  Views: single player (position, height, weight, seed, presets), the 6-player test lineup,
+  5 seeds at the same size, and base vs. current box player. Skin tone swatches, camera presets
+  (incl. broadcast distance), wireframe, height ruler (red = 6'1", purple = 6'6").
+  URL parameters: `view=single|test|seeds|compare`, `position`, `h` (in), `w` (lb), `seed`, `skin` (0–6), `cam`, `wire`.
 - **Source (never modified):** `source/med-base-low-poly.glb`, the approved medium T-pose from Meshy.
 - **Prepared asset:** `assets/base-medium.glb`, built by `tools/prep_base.py`.
 
@@ -18,7 +21,7 @@ python3 characters/tools/prep_base.py -- characters/source/med-base-low-poly.glb
 
 | Check | Result |
 |---|---|
-| Triangles | 1,230 (one connected, closed mesh, 610 vertices) |
+| Triangles | 1,182 (one connected mesh, 599 vertices) |
 | Shading | flat, matte (metallic/roughness map removed) |
 | Colours | base-colour texture, 1024 px |
 | Pose | T-pose, symmetric |
@@ -31,17 +34,25 @@ python3 characters/tools/prep_base.py -- characters/source/med-base-low-poly.glb
 - Blender: Z up, front faces −Y. glTF / Three.js: Y up, front faces +Z (the exporter converts).
 - Units: metres in the asset. The game works in yards (× 1.0936 when placed in the game).
 
-### Known source issues (manual Blender fixes recommended)
+### Source fixes (scripted in `prep_base.py`)
 
-These are in the Meshy geometry/texture and are not reliably fixable by script:
+1. **Lower facemask:** the crumpled cage (61 sliver faces, both non-manifold edges) is replaced
+   by a flat white plate with two dark rectangular openings. 0 bad edges remain.
+2. **Back of the neck:** faces painted dark grey are recoloured to skin (UVs point at a skin texel).
 
-1. **Lower facemask openings:** crumpled sliver triangles around the two lower openings, and the
-   only 2 non-manifold edges in the mesh (each shared by 4 faces), at roughly
-   (−0.085, −0.161, 0.625) and (0.127, −0.137, 0.686) in source units. Rebuild the lower mask bars as clean quads.
-2. **Back of the neck** is painted dark grey in the texture; it should be skin or jersey collar.
-3. **Ear pieces** are thin wedges; fine at game distance, worth squaring off.
-4. **Colours are painted across triangles**, not on face boundaries. Fine with a texture; if we
-   move to solid per-face colours (better for team colours), the colour borders need edge loops.
+Remaining, acceptable at game scale: ear pieces are thin wedges; colours are painted across
+triangles (fine with the texture; per-face solid colours would need edge loops at colour borders).
+
+## Body variation in the viewer (`src/BodyCustomizer.js`)
+
+A first, simple version of Milestone 3, used by the viewer:
+- `reshape(baseGeometry, body)` reshapes a copy of the base mesh from a resolved body
+  (`src/engine/Body.js`, same parameters as the live game). Height stretches legs (more) and
+  torso; the helmet is moved, never scaled. Weight widens torso / waist / hips / legs and arm
+  thickness by region. Arms move out with the shoulders.
+- `skinTexture(texture, tone)` recolours the skin texels.
+- Landmarks (`BASE`) are measured from `base-medium.glb`. The same landmarks will position the
+  skeleton joints in Milestone 2 so mesh and rig stay aligned.
 
 ## Next: Milestone 2 (rig + animate one player)
 

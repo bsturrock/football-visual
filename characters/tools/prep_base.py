@@ -6,13 +6,15 @@ Milestone 1: clean the medium base player and export it for Three.js.
 
 The source file is never modified. Steps:
   - weld UV-seam vertex splits into one connected mesh (needed for skinning later)
+  - fix the source: lower facemask cage -> flat plate with two openings; back of neck -> skin
   - consistent outward normals, flat shading
   - matte material: base colour only (drop the metallic/roughness map), texture <= 1024 px
   - real-world scale: 6'1" (1.854 m) to the top of the helmet
   - feet on the ground (y = 0), centred, facing +Z in glTF (Blender -Y)
 Prints a report (triangles, size, non-manifold edges) for the acceptance check.
 """
-import sys, os, bpy, bmesh
+import sys, os, colorsys, bpy, bmesh
+import numpy as np
 from mathutils import Vector, Matrix
 
 args = sys.argv[sys.argv.index('--') + 1:] if '--' in sys.argv else sys.argv[1:]
@@ -39,9 +41,68 @@ bm = bmesh.new()
 bm.from_mesh(obj.data)
 bmesh.ops.remove_doubles(bm, verts=bm.verts, dist=1e-4)
 bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+
+# --- source fixes (coordinates are in the Meshy file's units, before scaling) ----
+uvl = bm.loops.layers.uv.active
+img0 = next(n.image for n in obj.material_slots[0].material.node_tree.nodes if n.type == 'TEX_IMAGE' and n.image)
+TW, TH = img0.size
+_px = np.empty(TW * TH * 4, dtype=np.float32)
+img0.pixels.foreach_get(_px)
+_px = _px.reshape(TH, TW, 4)
+
+def face_uv(f):
+    return sum((l[uvl].uv for l in f.loops), Vector((0, 0))) / len(f.loops)
+
+def colour(f):
+    u = face_uv(f)
+    r, g, b = _px[min(TH - 1, max(0, int(u.y * TH))), min(TW - 1, max(0, int(u.x * TW))), :3]
+    h, s, v = colorsys.rgb_to_hsv(float(r), float(g), float(b))
+    if v < 0.3: return 'dark'
+    if s < 0.25: return 'white'
+    if 0.5 < h < 0.75: return 'blue'
+    return 'skin'
+
+def ref_uv(kind, where):
+    """Texture coordinate of the largest face of a colour in a region (a solid colour sample)."""
+    cands = [f for f in bm.faces if where(f.calc_center_median()) and colour(f) == kind]
+    return face_uv(max(cands, key=lambda f: f.calc_area())).copy()
+
+def in_box(c, z0, z1, x1, y1):
+    return z0 <= c.z <= z1 and abs(c.x) <= x1 and c.y <= y1
+
+WHITE_UV = ref_uv('white', lambda c: c.z > 0.8)
+DARK_UV = ref_uv('dark', lambda c: c.z > 0.7 and c.y < 0)
+SKIN_UV = ref_uv('skin', lambda c: 0.45 < c.z < 0.62 and c.y < 0 and abs(c.x) < 0.12)
+
+# 1. lower facemask: replace the crumpled cage with a flat white plate + two dark openings
+MASK = dict(z0=0.585, z1=0.735, x1=0.16, y1=-0.10)
+cage = [f for f in bm.faces if all(in_box(v.co, **MASK) for v in f.verts)]
+bmesh.ops.delete(bm, geom=cage, context='FACES_ONLY')
+bmesh.ops.delete(bm, geom=[v for v in bm.verts if not v.link_faces], context='VERTS')
+boundary = [e for e in bm.edges if e.is_boundary]
+filled = bmesh.ops.holes_fill(bm, edges=boundary, sides=0)['faces']
+filled = bmesh.ops.triangulate(bm, faces=filled)['faces']
+for f in filled:
+    for l in f.loops: l[uvl].uv = WHITE_UV
+plate_y = min(v.co.y for f in filled for v in f.verts)
+for x0, x1 in ((-0.105, -0.02), (0.02, 0.105)):
+    vs = [bm.verts.new((x, plate_y - 0.004, z)) for x, z in ((x0, 0.615), (x1, 0.615), (x1, 0.685), (x0, 0.685))]
+    f = bm.faces.new(vs)
+    f.normal_update()
+    if f.normal.y > 0: f.normal_flip()
+    for l in f.loops: l[uvl].uv = DARK_UV
+    bmesh.ops.triangulate(bm, faces=[f])
+
+# 2. back of the neck: painted dark grey in the texture -> recolour as skin
+neck = [f for f in bm.faces if 0.45 < f.calc_center_median().z < 0.64 and f.calc_center_median().y > -0.02
+        and abs(f.calc_center_median().x) < 0.16 and colour(f) == 'dark']
+for f in neck:
+    for l in f.loops: l[uvl].uv = SKIN_UV
+print(f'fixes: facemask cage {len(cage)} faces -> plate {len(filled)} + 2 openings; neck faces recoloured {len(neck)}')
+bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
 for f in bm.faces:
     f.smooth = False
-non_manifold = [e for e in bm.edges if not e.is_manifold]
+non_manifold = [e for e in bm.edges if len(e.link_faces) > 2]
 nm_report = [tuple(round(c, 3) for c in (e.verts[0].co + e.verts[1].co) / 2) for e in non_manifold]
 bm.to_mesh(obj.data)
 bm.free()
@@ -94,5 +155,5 @@ print(f'  triangles      {tris}')
 print(f'  vertices       {len(obj.data.vertices)} (welded)')
 print(f'  size (m)       width {dims.x:.3f}  depth {dims.y:.3f}  height {dims.z:.3f}')
 print(f'  texture        {img.size[0]}x{img.size[1]}')
-print(f'  non-manifold   {len(non_manifold)} edges {nm_report}')
+print(f'  bad edges      {len(non_manifold)} (shared by 3+ faces) {nm_report}')
 print(f'  wrote          {dst} ({os.path.getsize(dst) / 1e6:.2f} MB)')
