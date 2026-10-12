@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Portraits — procedural faces</title>
+<style>
+  body { margin: 0; background: #1b2130; color: #dfe6f3; font: 12px/1.35 system-ui, sans-serif; }
+  #grid { display: grid; grid-template-columns: repeat(var(--cols, 10), 1fr); gap: 6px; padding: 8px; }
+  .card { background: #262e40; border-radius: 4px; overflow: hidden; }
+  .card canvas { display: block; width: 100%; }
+  .card div { padding: 3px 6px 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+</style>
+<script type="importmap">
+{ "imports": { "three": "../../vendor/three/three.module.js", "three/addons/": "../../vendor/three/addons/" } }
+</script>
+</head>
+<body>
+<div id="grid"></div>
+<script type="module">
+// ?n=50 &start=1 &cols=10 &size=192 &angle=0.35 &helmetless (always) — seeds start..start+n-1
+import * as THREE from 'three';
+import { createMediumPlayer } from '../../src/engine/characters/mediumPlayer.js';
+import { resolveFace } from '../../src/engine/characters/face.js';
+import { renderPortrait } from '../../src/engine/characters/portrait.js';
+import { resolveBody } from '../../src/engine/Body.js';
+
+const q = new URLSearchParams(location.search);
+const n = +(q.get('n') ?? 50), start = +(q.get('start') ?? 1), size = +(q.get('size') ?? 192), angle = +(q.get('angle') ?? 0.35);
+document.getElementById('grid').style.setProperty('--cols', q.get('cols') ?? 10);
+const POS = ['QB', 'RB', 'WR', 'TE', 'OL', 'DL', 'LB', 'CB', 'S', 'K'];
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.NeutralToneMapping;
+
+for (let i = 0; i < n; i++) {
+  const seed = start + i;
+  const position = POS[seed % POS.length];
+  const rig = createMediumPlayer({ body: resolveBody({ seed, position }), face: resolveFace({ seed }) });
+  const card = document.createElement('div'); card.className = 'card';
+  card.appendChild(renderPortrait(renderer, rig, { size, angle }));
+  const f = rig.face;
+  const label = document.createElement('div');
+  label.textContent = `#${seed} ${position} · ${f.hairStyle}${f.beard !== 'none' ? ' · ' + f.beard : ''}`;
+  card.appendChild(label);
+  document.getElementById('grid').appendChild(card);
+  for (const m of rig.meshes) m.geometry.dispose();
+}
+window.__ready = true;
+</script>
+</body>
+</html>

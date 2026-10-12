@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Meshy vs procedural — medium player comparison</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #c3c8cf; font: 13px/1.4 system-ui, sans-serif; }
+  #ui { position: fixed; left: 10px; top: 10px; background: rgba(20,26,40,.82); color: #fff; padding: 10px 12px; border-radius: 4px; z-index: 2; }
+  #ui label { display: block; margin: 3px 0; }
+  #ui button { margin: 2px 2px 2px 0; }
+  #stats { white-space: pre; font: 11px/1.35 ui-monospace, monospace; margin-top: 6px; color: #cfe; }
+  .tag { position: fixed; bottom: 12px; color: #1a2030; font-weight: 600; z-index: 1; }
+</style>
+<script type="importmap">
+{ "imports": { "three": "../../vendor/three/three.module.js", "three/addons/": "../../vendor/three/addons/" } }
+</script>
+</head>
+<body>
+<div id="ui">
+  <div><b>View</b><br>
+    <button data-view="front">Front</button><button data-view="side">Side</button><button data-view="back">Back</button>
+    <button data-view="threequarter">¾</button><button data-view="top">Top</button><button data-view="broadcast">Broadcast</button>
+  </div>
+  <label>Mode <select id="mode"><option value="side">side by side</option><option value="overlay">overlay</option></select></label>
+  <label>Meshy opacity <input id="opacity" type="range" min="0" max="1" step="0.05" value="1"></label>
+  <label><input id="wire" type="checkbox"> wireframe</label>
+  <label><input id="hair" type="checkbox" checked> procedural hair</label>
+  <label>Zoom <select id="zoom"><option value="full">full body</option><option value="torso">torso</option><option value="pads">pads</option><option value="neck">neck</option><option value="hand">hand</option><option value="head">head</option><option value="arm">arm</option><option value="leg">leg</option></select></label>
+  <div id="stats"></div>
+</div>
+<div class="tag" id="tagL"></div><div class="tag" id="tagR"></div>
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { createMediumPlayer, tPose } from '../../src/engine/characters/mediumPlayer.js';
+
+const q = new URLSearchParams(location.search);
+const state = {
+  view: q.get('view') || 'front', mode: q.get('mode') || 'side', opacity: +(q.get('opacity') ?? 1),
+  wire: q.get('wire') === '1', hair: q.get('hair') !== '0', zoom: q.get('zoom') || 'full',
+};
+
+if (q.get('ui') === '0') document.getElementById('ui').style.display = 'none';
+const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.NeutralToneMapping;   // same as the game
+renderer.toneMappingExposure = 1.05;
+document.body.appendChild(renderer.domElement);
+const scene = new THREE.Scene();
+scene.background = new THREE.Color('#c3c8cf');
+scene.add(new THREE.HemisphereLight('#f2f6ff', '#6d8a58', 1.7));
+const sun = new THREE.DirectionalLight('#fffaf0', 2.5);
+sun.position.set(3, 6, 5);
+scene.add(sun);
+
+const cam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.01, 100);
+const persp = new THREE.PerspectiveCamera(30, 1, 0.1, 400);
+
+// --- the two models -------------------------------------------------------------
+const meshy = new THREE.Group();
+scene.add(meshy);
+const gltf = await new GLTFLoader().loadAsync('../../assets/meshy/source/new-base-player.glb');
+const src = gltf.scene;
+src.position.y = 0.91;                    // file is centred on the origin; put the soles on y = 0
+const meshyMats = [];
+let meshyTris = 0;
+src.traverse(o => {
+  if (!o.isMesh) return;
+  o.material = o.material.clone();
+  o.material.transparent = true;
+  meshyMats.push(o.material);
+  meshyTris += (o.geometry.index ? o.geometry.index.count : o.geometry.attributes.position.count) / 3;
+});
+meshy.add(src);
+
+const rig = createMediumPlayer();
+if (q.get('pose') !== 'rest') tPose(rig);   // rest = the game's arms-down bind pose
+scene.add(rig.root);
+
+// --- framing --------------------------------------------------------------------
+const ZOOM = { neck: [0, 1.5, 0.42], pads: [0, 1.42, 0.85], hand: [0.78, 1.36, 0.34], torso: [0, 1.25, 0.75], full: [0, 0.92, 2.15], head: [0, 1.66, 0.42], arm: [0.62, 1.37, 0.75], leg: [0.15, 0.5, 1.1] };
+const VIEWS = { front: [0, 0, 1], back: [0, 0, -1], side: [1, 0, 0], threequarter: [0.62, 0.2, 0.76], top: [0, 1, 0.0001] };
+
+function layout() {
+  const sideBySide = state.mode === 'side';
+  const gap = state.zoom === 'hand' ? 0.42 : state.zoom === 'full' ? 2.2 : (state.zoom === 'head' ? 0.42 : state.zoom === 'torso' ? 1.0 : state.zoom === 'neck' ? 0.45 : state.zoom === 'pads' ? 0.95 : state.zoom === 'hand' ? 0.36 : 1.0);
+  const v = VIEWS[state.view] || VIEWS.front;
+  // separate along the screen's horizontal axis so side views don't overlap
+  const right = new THREE.Vector3(0, 1, 0).cross(new THREE.Vector3(...v)).normalize();
+  if (right.lengthSq() < 0.5) right.set(1, 0, 0);
+  const off = sideBySide ? right.multiplyScalar(gap / 2) : new THREE.Vector3();
+  meshy.position.copy(off).multiplyScalar(-1);
+  rig.root.position.copy(off);
+  for (const m of meshyMats) { m.opacity = state.opacity; m.wireframe = state.wire; m.depthWrite = state.opacity > 0.99; }
+  for (const m of rig.meshes) m.material.wireframe = state.wire;
+  rig.hair.visible = state.hair;
+  document.getElementById('tagL').textContent = sideBySide ? 'Meshy original (unmodified)' : 'overlay: Meshy translucent over procedural';
+  document.getElementById('tagR').textContent = sideBySide ? 'Procedural (createMediumPlayer)' : '';
+}
+
+function frame() {
+  const w = innerWidth, h = innerHeight, aspect = w / h;
+  renderer.setSize(w, h);
+  const [cx, cy, size] = ZOOM[state.zoom];
+  const target = new THREE.Vector3(cx, cy, 0);
+  if (state.view === 'broadcast') {
+    // elevated sideline TV camera, ~35 yd away, the way the game frames players
+    persp.aspect = aspect;
+    persp.position.set(0, 14, 32);
+    persp.lookAt(0, 0.9, 0);
+    persp.fov = 9;
+    persp.updateProjectionMatrix();
+    return persp;
+  }
+  const span = state.mode === 'side' && state.zoom === 'full' ? size * 2.1 : (state.mode === 'side' ? size * 2.2 : size);
+  const halfH = (aspect >= span / size ? size : span / aspect) / 2 * 1.08;
+  cam.left = -halfH * aspect; cam.right = halfH * aspect; cam.top = halfH; cam.bottom = -halfH;
+  const v = new THREE.Vector3(...VIEWS[state.view]).normalize();
+  cam.position.copy(target).addScaledVector(v, 10);
+  cam.up.set(0, state.view === 'top' ? 0 : 1, state.view === 'top' ? -1 : 0);
+  cam.lookAt(target);
+  cam.updateProjectionMatrix();
+  const tl = document.getElementById('tagL'), tr = document.getElementById('tagR');
+  tl.style.left = state.mode === 'side' ? '22%' : '40%'; tr.style.left = '64%';
+  return cam;
+}
+
+function render() {
+  layout();
+  renderer.render(scene, frame());
+  const box = new THREE.Box3().setFromObject(rig.root);
+  const srcBox = new THREE.Box3().setFromObject(src);
+  const s = (b) => b.getSize(new THREE.Vector3()).toArray().map(v => v.toFixed(3)).join(' × ');
+  document.getElementById('stats').textContent =
+    `Meshy       ${meshyTris} tris   ${s(srcBox)} m\n` +
+    `procedural  ${rig.triangles} tris   ${s(box)} m\n` +
+    `meshes      ${rig.meshes.length} (one per joint + hair)\n` + JSON.stringify(rig.trianglesByJoint);
+}
+
+for (const b of document.querySelectorAll('[data-view]')) b.onclick = () => { state.view = b.dataset.view; render(); };
+for (const id of ['mode', 'opacity', 'wire', 'hair', 'zoom']) {
+  const el = document.getElementById(id);
+  if (el.type === 'checkbox') el.checked = state[id]; else el.value = state[id];
+  el.oninput = () => { state[id] = el.type === 'checkbox' ? el.checked : (id === 'opacity' ? +el.value : el.value); render(); };
+}
+addEventListener('resize', render);
+render();
+window.__dbg = { THREE, rig, scene, cam: () => frame() };
+window.__ready = true;
+</script>
+</body>
+</html>

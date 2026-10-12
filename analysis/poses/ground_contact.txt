@@ -1,0 +1,27 @@
+pose          kind  lowest point over 3 s (yards): min .. max
+rest new             +0.000 .. +0.000
+rest old             +0.000 .. +0.000
+idle new             -0.002 .. -0.002
+idle old             -0.005 .. -0.005
+run new              -0.028 .. +0.040
+run old              -0.009 .. +0.031
+sprint new           -0.029 .. +0.056
+sprint old           -0.019 .. +0.044
+backpedal new        -0.023 .. +0.011
+backpedal old        -0.015 .. +0.016
+shuffle new          -0.017 .. +0.006
+shuffle old          -0.028 .. -0.009
+3pt new              -0.020 .. -0.020
+3pt old              -0.012 .. -0.012
+2pt new              -0.021 .. -0.021
+2pt old              -0.016 .. -0.016
+wr new               -0.004 .. -0.004
+wr old               +0.000 .. +0.000
+block new            -0.005 .. -0.005
+block old            -0.005 .. -0.005
+tackle new           -0.165 .. -0.010
+tackle old           -0.173 .. -0.028
+catch new            -0.002 .. -0.002
+catch old            -0.005 .. -0.005
+throw new            -0.002 .. -0.002
+throw old            -0.005 .. -0.005

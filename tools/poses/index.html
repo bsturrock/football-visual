@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Pose test — medium player</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #c3c8cf; font: 13px/1.4 system-ui, sans-serif; }
+  #ui { position: fixed; left: 10px; top: 10px; background: rgba(20,26,40,.82); color: #fff; padding: 10px 12px; border-radius: 4px; z-index: 2; max-width: 300px; }
+  #ui button { margin: 2px 2px 2px 0; }
+  .lbl { position: fixed; color: #1a2030; font-weight: 600; transform: translateX(-50%); pointer-events: none; }
+</style>
+<script type="importmap">
+{ "imports": { "three": "../../vendor/three/three.module.js", "three/addons/": "../../vendor/three/addons/" } }
+</script>
+</head>
+<body>
+<div id="ui">
+  <div><b>Camera</b><br>
+    <button data-cam="front">Front</button><button data-cam="side">Side</button><button data-cam="threequarter">¾</button>
+    <button data-cam="back">Back</button><button data-cam="broadcast">Broadcast</button>
+  </div>
+  <label><input id="compare" type="checkbox"> show current game player beside each</label><br>
+  <label><input id="pause" type="checkbox"> pause</label>
+  <div style="margin-top:6px;opacity:.8">URL: ?poses=idle,run,… &amp;cam=… &amp;compare=1 &amp;t=seconds (fixed time, headless)</div>
+</div>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { createMediumPlayer } from '../../src/engine/characters/mediumPlayer.js';
+import { createPlayerRig } from '../../src/engine/PlayerModel.js';
+import { Animator } from '../../src/engine/Animator.js';
+import { resolveBody } from '../../src/engine/Body.js';
+import { resolveKit } from '../../src/engine/Uniforms.js';
+import { SKIN_TONES } from '../../src/engine/constants.js';
+import { loadHelmet, attachHelmet } from '../../src/engine/characters/helmet.js';
+import { resolveFace } from '../../src/engine/characters/face.js';
+
+const M_TO_YD = 1.0936;
+const ALL = ['tpose', 'rest', 'idle', 'run', 'sprint', 'backpedal', 'shuffle', '3pt', '2pt', 'wr', 'block', 'tackle', 'catch', 'throw', 'fall'];
+const q = new URLSearchParams(location.search);
+const state = {
+  poses: (q.get('poses') || 'rest,idle,run,sprint,3pt,block,tackle,catch,throw,fall').split(','),
+  cam: q.get('cam') || 'threequarter', compare: q.get('compare') === '1',
+  fixedT: q.has('t') ? +q.get('t') : null, paused: false,
+  // lineup mode: players=POS:heightIn:weightLb:seed,... (one generated body per column, all in `pose`)
+  players: q.get('players') ? q.get('players').split(',').map(t => { const [position, h, w, seed] = t.split(':'); return { position, heightIn: +h, weightLb: +w, seed: +(seed ?? 1) }; }) : null,
+  pose: q.get('pose') || 'rest',
+};
+if (state.players) state.poses = state.players.map(() => state.pose);
+if (q.get('ui') === '0') document.getElementById('ui').style.display = 'none';
+// team colours: &primary=#hex &secondary=#hex &helmetc=#hex &mask=#hex (defaults: the Meshy blue/white)
+const hexq = (k, d) => (q.get(k) ? '#' + q.get(k).replace('#', '') : d);
+const KIT = resolveKit({ primary: hexq('primary', '#0255fd'), secondary: hexq('secondary', '#ffffff'), helmet: q.get('helmetc') ? hexq('helmetc') : undefined, facemask: q.get('mask') ? hexq('mask') : undefined });
+const helmetAsset = q.get('helmet') === '1' ? await loadHelmet() : null;   // helmet=1: mount the Meshy helmet
+const useFaces = q.get('faces') === '1';                                    // faces=1: each player's own face
+
+const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.NeutralToneMapping;
+renderer.toneMappingExposure = 1.05;
+renderer.shadowMap.enabled = true;
+document.body.appendChild(renderer.domElement);
+const scene = new THREE.Scene();
+scene.background = new THREE.Color('#c3c8cf');
+scene.add(new THREE.HemisphereLight('#f2f6ff', '#6d8a58', 1.7));
+const sun = new THREE.DirectionalLight('#fffaf0', 2.5);
+sun.position.set(6, 12, 8); sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+Object.assign(sun.shadow.camera, { left: -20, right: 20, top: 10, bottom: -10 });
+scene.add(sun);
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(200, 60), new THREE.MeshStandardMaterial({ color: '#7fa36a', roughness: 1 }));
+ground.rotation.x = -Math.PI / 2; ground.receiveShadow = true; scene.add(ground);
+const camera = new THREE.PerspectiveCamera(30, 1, 0.1, 500);
+// height rulers (lineup mode): 6'0" and 6'6", in yards
+if (q.get('players')) for (const [inch, col] of [[72, '#c0392b'], [78, '#7d3c98']]) {
+  const bar = new THREE.Mesh(new THREE.BoxGeometry(60, 0.012, 0.012), new THREE.MeshBasicMaterial({ color: col }));
+  bar.position.set(0, inch / 36, -0.45); scene.add(bar);
+}
+const controls = new OrbitControls(camera, renderer.domElement);
+
+// --- players ----------------------------------------------------------------------
+function fakePlayer(rig) {
+  return {
+    rig, vel: new THREE.Vector2(), facing: 0, state: 'up', intent: { type: 'idle' }, crouch: 0, accelLocal: 0,
+    action: null, hasBall: false, lookAt: null, reachTarget: null, upper: null,
+    fallDir: new THREE.Vector2(0, 1), fallAngle: 0, riseT: 0, riseDur: 1, pos: new THREE.Vector2(),
+  };
+}
+const SPACING = 2.0;   // yards between columns
+const items = [];
+function addPlayer(rig, x, pose, kind) {
+  rig.root.position.x = x;
+  rig.root.traverse(o => { if (o.isMesh) o.castShadow = true; });
+  scene.add(rig.root);
+  const fp = fakePlayer(rig);
+  fp.pos.set(x, 0);
+  const anim = new Animator(fp);
+  anim.phase = 0; anim.time = 0;
+  items.push({ rig, fp, anim, x, pose, kind });
+}
+function build() {
+  for (const it of items) scene.remove(it.rig.root);
+  items.length = 0;
+  for (const el of document.querySelectorAll('.lbl')) el.remove();
+  state.poses.forEach((pose, i) => {
+    const x = (i - (state.poses.length - 1) / 2) * SPACING * (state.compare ? 1.6 : 1);
+    const spec = state.players?.[i];
+    const body = spec ? resolveBody(spec) : null;
+    const face = useFaces ? resolveFace({ seed: spec ? spec.seed : 1 + i }) : undefined;
+    const rig = createMediumPlayer({ body, face, kit: { ...KIT, gloveTrim: KIT.trim, studs: '#d8dadf' } });
+    if (helmetAsset) attachHelmet(rig, helmetAsset, KIT);
+    rig.root.scale.setScalar(M_TO_YD);                      // metres → yards, the game's unit
+    addPlayer(rig, x - (state.compare ? 0.5 : 0), pose, 'new');
+    if (state.compare) {
+      const old = createPlayerRig({ body: body || resolveBody({ seed: 7, position: 'LB', heightIn: 73, weightLb: 225 }), kit: resolveKit({ primary: '#0255fd', secondary: '#ffffff' }), skin: SKIN_TONES[2] });
+      addPlayer(old, x + 0.5, pose, 'old');
+    }
+    const l = document.createElement('div'); l.className = 'lbl'; l.dataset.x = x; document.body.appendChild(l);
+    l.textContent = spec ? `${spec.position} ${Math.floor(spec.heightIn / 12)}'${spec.heightIn % 12}" ${spec.weightLb}` + (q.has('seedlabel') ? ` #${spec.seed}` : '') : pose;
+  });
+}
+
+/** Physical state for a pose; the game's Animator turns it into joint rotations. */
+function applyPose(it, dt) {
+  const { fp, rig, pose } = it;
+  Object.assign(fp, { intent: { type: 'idle' }, upper: null, crouch: 0, state: 'up', fallAngle: 0, reachTarget: null, hasBall: false, accelLocal: 0 });
+  fp.vel.set(0, 0);
+  if (fp.action && pose !== 'throw') fp.action = null;
+  let lean = 0;
+  if (pose === 'tpose' || pose === 'rest') {
+    for (const b of Object.values(rig.bones)) b.rotation.set(0, 0, 0);
+    if (pose === 'tpose') { rig.bones.shL.rotation.z = Math.PI / 2; rig.bones.shR.rotation.z = -Math.PI / 2; }
+    const L = rig.leg; rig.bones.pelvis.position.y = L.FOOT_H + L.SHIN + L.THIGH - L.HIP_Y;
+    rig.tilt.quaternion.identity(); rig.root.position.y = 0;
+    return;
+  }
+  if (pose === 'run') fp.vel.set(0, 6.5);
+  if (pose === 'sprint') { fp.vel.set(0, 9.5); fp.accelLocal = 2; }
+  if (pose === 'backpedal') fp.vel.set(0, -4.5);
+  if (pose === 'shuffle') fp.vel.set(3.5, 0);
+  if (pose === '3pt' || pose === '2pt' || pose === 'wr') fp.intent = { type: 'stance', kind: pose };
+  if (pose === 'block') { fp.upper = 'block'; fp.crouch = 0.35; }
+  if (pose === 'tackle') { fp.upper = 'brace'; fp.crouch = 0.45; fp.vel.set(0, 3); lean = 0.35; }
+  if (pose === 'catch') fp.reachTarget = new THREE.Vector3(it.x, 2.6, 0.5);
+  if (pose === 'throw') {
+    if (!fp.action) fp.action = { type: 'throw', t: 0, dur: 1.1 };
+    fp.action.t = (fp.action.t + dt) % 1.6;
+    fp.hasBall = true; fp.upper = 'qbHold';
+  }
+  if (pose === 'fall') { fp.state = 'down'; fp.fallAngle = 1.45; }
+  it.anim.update(dt);
+  const ang = fp.state === 'up' ? lean : fp.fallAngle;
+  rig.tilt.quaternion.setFromAxisAngle(new THREE.Vector3(1, 0, 0), ang);
+  rig.root.position.y = it.anim.lift;
+}
+
+// --- camera ---------------------------------------------------------------------------
+function setCam() {
+  const n = state.poses.length, w = n * SPACING * (state.compare ? 1.6 : 1);
+  const dist = q.has('dist') ? +q.get('dist') : (n === 1 ? 6.5 : Math.max(8, w * 1.25));
+  const dirs = { level: [0, 0.0001, 1], front: [0, 0.18, 1], back: [0, 0.18, -1], side: [1, 0.15, 0.0001], threequarter: [0.55, 0.3, 1], broadcast: [0, 0.45, 1] };
+  const d = new THREE.Vector3(...(dirs[state.cam] || dirs.threequarter)).normalize();
+  const target = new THREE.Vector3(0, q.has('ty') ? +q.get('ty') : (n === 1 && state.poses[0] === 'fall' ? 0.4 : 0.95), n === 1 && state.poses[0] === 'fall' ? -0.6 : 0);
+  camera.position.copy(target).addScaledVector(d, state.cam === 'broadcast' ? 38 : (state.cam === 'side' ? dist * 0.9 : dist));
+  camera.fov = q.has('fov') ? +q.get('fov') : (state.cam === 'broadcast' ? 14 : 30);
+  controls.target.copy(target);
+  camera.lookAt(target);
+}
+function resize() {
+  renderer.setSize(innerWidth, innerHeight);
+  camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
+}
+const _v = new THREE.Vector3();
+function labels() {
+  for (const el of document.querySelectorAll('.lbl')) {
+    _v.set(+el.dataset.x, -0.25, 0.6).project(camera);
+    el.style.left = `${(_v.x + 1) / 2 * innerWidth}px`; el.style.top = `${(1 - _v.y) / 2 * innerHeight}px`;
+  }
+}
+
+for (const b of document.querySelectorAll('[data-cam]')) b.onclick = () => { state.cam = b.dataset.cam; setCam(); };
+document.getElementById('compare').checked = state.compare;
+document.getElementById('compare').onchange = (e) => { state.compare = e.target.checked; build(); setCam(); };
+document.getElementById('pause').onchange = (e) => { state.paused = e.target.checked; };
+addEventListener('resize', resize);
+build(); setCam(); resize();
+
+// fixed-time mode (headless captures): step the animator deterministically to time t
+if (state.fixedT != null) {
+  const dt = 1 / 60;
+  for (let t = 0; t < state.fixedT; t += dt) for (const it of items) applyPose(it, dt);
+  renderer.render(scene, camera); labels();
+  window.__ready = true;
+} else {
+  let last = performance.now();
+  renderer.setAnimationLoop((now) => {
+    const dt = Math.min(0.05, (now - last) / 1000); last = now;
+    if (!state.paused) for (const it of items) applyPose(it, dt);
+    controls.update();
+    renderer.render(scene, camera); labels();
+  });
+  window.__ready = true;
+}
+window.__dbg = { THREE, items, scene, camera, applyPose };
+</script>
+</body>
+</html>
