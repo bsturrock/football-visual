@@ -167,12 +167,15 @@ export class Animator {
     switch (kind) {
       case '3pt':
       case 'center':
-        T.spine.x = 1.12; T.chest.x = 0.18; T.neck.x = -1.05; T.head.x = -0.2;
-        T.hipL.x = -1.3; T.knL.x = 1.95; T.hipR.x = -0.95; T.knR.x = 1.8;
-        T.hipL.z = 0.16; T.hipR.z = -0.16;
-        T.shR.x = -1.38; T.elR.x = -0.05;
-        if (kind === 'center') { T.shL.x = -1.38; T.elL.x = -0.05; }
-        else { T.shL.x = -0.75; T.elL.x = -0.95; T.shL.z = 0.1; }
+        // loaded drive position: back flat to slightly head-down, shoulders ahead of and just
+        // below the hips, down arm straight to the turf, head up, weight forward (not a squat)
+        T.spine.x = 1.45; T.chest.x = 0.35; T.neck.x = -1.55; T.head.x = -0.3;
+        T.hipL.x = -1.15; T.knL.x = 1.75;                  // front foot
+        T.hipR.x = -0.75; T.knR.x = 1.7;                   // back foot (down-hand side), staggered
+        T.hipL.z = 0.14; T.hipR.z = -0.14;
+        T.shR.x = -1.88; T.elR.x = 0;                      // down arm straight to the ground
+        if (kind === 'center') { T.shL.x = -1.88; T.elL.x = 0; }
+        else { T.shL.x = -1.35; T.elL.x = -0.6; T.shL.z = 0.1; }  // off hand resting on the thigh
         break;
       case 'qb':
         T.spine.x = 0.28; T.neck.x = -0.25;
