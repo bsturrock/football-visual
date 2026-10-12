@@ -113,10 +113,12 @@ export class PlayerRigFactory {
     };
     const helmet = this.helmet ? attach(this.helmet.clone(), new THREE.Vector3()) : null;
     const head = attach(placeholderHead(opts.skin || '#c68b62'), new THREE.Vector3(0, 0.1, 0.01));
-    if (helmet) helmet.visible = opts.helmet !== false;
+    // the placeholder head is only shown with the helmet off (it must never poke through the shell)
+    const setHelmet = (on) => { if (helmet) helmet.visible = on; head.visible = !on || !helmet; };
+    setHelmet(opts.helmet !== false);
 
     const rig = { root, tilt, yaw, bones: P, leg, model, mesh, helmet, head, body, scales: S, pairs: [], update: null };
-    rig.setHelmet = (on) => { if (helmet) helmet.visible = on; };
+    rig.setHelmet = setHelmet;
     const bindPose = Object.values(B).map(b => [b, b.position.clone(), b.quaternion.clone()]);
     this._bind(rig, B, target);
     rig.update = () => this._update(rig, B);

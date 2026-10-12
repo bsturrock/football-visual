@@ -102,25 +102,6 @@ bpy.ops.object.mode_set(mode='WEIGHT_PAINT')
 bpy.ops.object.vertex_group_limit_total(group_select_mode='ALL', limit=4)
 bpy.ops.object.vertex_group_normalize_all(group_select_mode='ALL', lock_active=False)
 bpy.ops.object.mode_set(mode='OBJECT')
-# shoulder pads ride on the torso: inside the pad edge, shoulder weight -> chest,
-# with a short blend at the edge so the arm still bends cleanly at the armpit
-PAD_IN, PAD_EDGE = 0.34, 0.41
-for v in mesh.data.vertices:
-    co = mesh.matrix_world @ v.co
-    ax = abs(co.x)
-    if co.z < 1.18 or ax > PAD_EDGE:
-        continue
-    k = 'L' if co.x > 0 else 'R'
-    keep = min(1.0, max(0.0, (ax - PAD_IN) / (PAD_EDGE - PAD_IN)))   # 0 = all chest, 1 = unchanged
-    w = {mesh.vertex_groups[g.group].name: g.weight for g in v.groups}
-    moved = 0.0
-    for name in ('sh' + k, 'el' + k):
-        if name in w:
-            moved += w[name] * (1 - keep)
-            mesh.vertex_groups[name].add([v.index], w[name] * keep, 'REPLACE')
-    if moved > 0:
-        mesh.vertex_groups['chest'].add([v.index], w.get('chest', 0.0) + moved, 'REPLACE')
-
 unweighted = sum(1 for v in mesh.data.vertices if not any(g.weight > 1e-4 for g in v.groups))
 
 # dominant bone per vertex (for a quick sanity report)

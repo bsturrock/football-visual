@@ -67,8 +67,9 @@ python3 characters/tools/rig_base.py -- characters/assets/base-medium.glb charac
 - **Skeleton:** 17 bones named after the game's animator joints (`pelvis, spine, chest, neck, head,
   shL/elL/handL, shR/elR/handR, hipL/knL/ankL, hipR/knR/ankR`), placed on landmarks measured from the
   mesh's colour bands (knee skin band, wristband, glove, sock, cleat).
-- **Weights:** automatic (bone heat) on the welded mesh, max 4 per vertex. Shoulder pads are moved
-  onto the chest with a short blend at the pad edge, so raising the arms doesn't pinch the torso.
+- **Weights:** automatic (bone heat) on the welded mesh, max 4 per vertex. (A rigid-pad override was
+  tried for the arms-up pose and reverted: it made everyday arm poses look wrong. Arms-up pinches a
+  little; to revisit gently.)
 - **Runtime (`src/PlayerRig.js`):** each player gets a reshaped geometry and a skeleton whose joints
   are moved by the same `mapPoint` function, then re-bound, so every height/weight is rigged correctly.
   The game's `Animator` drives an invisible proxy joint hierarchy (arms-down convention); its world
@@ -87,16 +88,18 @@ python3 characters/tools/prep_helmet.py -- characters/source/helmet.glb characte
 
 - **Helmet** (`source/helmet.glb` from Meshy, 408 tris, hollow, facemask matching
   `docs/reference/facemask.png`): mirrored for exact symmetry (the −X half, whose facemask has the
-  two large + two narrow lower openings), shell pushed toward a rounded box (`BOXY=0.6`, facemask
-  untouched), scaled to the body's old helmet (0.36 m wide, bottom at 1.48 m, mask front 0.18 m
-  ahead), origin at the head joint. 570 tris, 0 bad edges.
+  two large + two narrow lower openings),
+  scaled to the body's old helmet (0.36 m wide, bottom at 1.48 m, mask front 0.18 m ahead), origin at
+  the head joint. Otherwise used exactly as modelled: the provided mesh is the reference (an earlier
+  "boxier" reshape was reverted). 570 tris, 0 bad edges.
 - **Body:** `rig_base.py` removes the fused helmet (390 faces) before weighting.
 - **Runtime:** helmet and a placeholder boxy head are attached rigidly to the head bone (fixed
-  size on every body). The head shows through the visor. Viewer: **Helmet** checkbox (`helmet=0`).
+  size on every body). The placeholder head is only shown with the helmet off. Viewer: **Helmet**
+  checkbox (`helmet=0`).
 
 ### Still to do in 2.5
 1. Seeded faces (eyes, brows, mouth) and hair / facial hair pieces to replace the placeholder head.
 2. Helmet team colours (stripe, shell, mask) recoloured per uniform.
-3. Tune: helmet boxiness, head size inside the helmet.
+3. A real head that fits inside the helmet (so a face can show through the visor without poking through).
 
 Then Milestones 3–4 (body tuning, 20-linebacker variation test), 5 (22 players in the game).

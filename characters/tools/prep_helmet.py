@@ -6,8 +6,7 @@ Prepare the separate helmet (with its own facemask) for the player.
 The source is never modified. Steps:
   - weld, consistent normals, flat shading, matte base-colour texture (<= 1024 px)
   - exact left/right symmetry: keep one half and mirror it (HELMET_KEEP=-1 keeps -X, the default: its facemask matches the reference)
-  - boxier shell: shell vertices are pushed toward a rounded box (superellipse); the facemask
-    and brim at the front are left as modelled (BOXY = 0..1 controls the amount)
+  - otherwise the helmet is used exactly as modelled (the provided mesh is the reference)
   - scaled and positioned to replace the helmet on base-medium.glb (same width, same bottom, same front)
   - output in metres, glTF y up, facing +Z, origin at the head joint (attach it to the head bone)
 """
@@ -17,7 +16,6 @@ from mathutils import Vector, Matrix
 args = sys.argv[sys.argv.index('--') + 1:] if '--' in sys.argv else sys.argv[1:]
 src, dst = args[0], args[1]
 KEEP = int(os.environ.get('HELMET_KEEP', '-1'))
-BOXY = float(os.environ.get('BOXY', '0.6'))
 TEX_MAX = 1024
 FRONT_Y = -0.55          # source units: everything in front of this is facemask / brim
 # target (base-medium.glb helmet, metres, Blender coords: z up, front -Y) and the head joint
@@ -49,23 +47,6 @@ bmesh.ops.mirror(bm, geom=bm.verts[:] + bm.edges[:] + bm.faces[:], matrix=Matrix
 bmesh.ops.remove_doubles(bm, verts=bm.verts, dist=1e-4)
 bmesh.ops.triangulate(bm, faces=[f for f in bm.faces if len(f.verts) > 3])
 
-# --- boxier shell ---------------------------------------------------------------------
-shell = [v for v in bm.verts if v.co.y >= FRONT_Y]
-lo = Vector([min(v.co[i] for v in shell) for i in range(3)])
-hi = Vector([max(v.co[i] for v in shell) for i in range(3)])
-c, h = (lo + hi) / 2, (hi - lo) / 2
-for v in bm.verts:
-    # full effect behind the facemask, fading to none at the front
-    t = BOXY * min(1.0, max(0.0, (v.co.y - FRONT_Y) / 0.2))
-    if t <= 0: continue
-    q = Vector(((v.co.x - c.x) / h.x, (v.co.y - c.y) / h.y, (v.co.z - c.z) / h.z))
-    n2 = q.length
-    n6 = (abs(q.x) ** 6 + abs(q.y) ** 6 + abs(q.z) ** 6) ** (1 / 6)
-    if n6 < 1e-6: continue
-    boxed = q * (n2 / n6)
-    q = q.lerp(boxed, t)
-    v.co = Vector((c.x + q.x * h.x, c.y + q.y * h.y, c.z + q.z * h.z))
-
 bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
 for f in bm.faces: f.smooth = False
 bad = [e for e in bm.edges if len(e.link_faces) > 2]
@@ -76,7 +57,9 @@ bm.free()
 vs = [v.co for v in obj.data.vertices]
 lo = Vector([min(v[i] for v in vs) for i in range(3)])
 hi = Vector([max(v[i] for v in vs) for i in range(3)])
-shell_w = 2 * max(abs(v.x) for v in vs if v.y >= FRONT_Y and abs(v.x) < h.x * 0.92)  # shell, ear pads excluded
+shell = [v for v in vs if v.y >= FRONT_Y]
+half = max(abs(v.x) for v in shell)
+shell_w = 2 * max(abs(v.x) for v in shell if abs(v.x) < half * 0.92)  # shell, ear pads excluded
 s = TARGET['width'] / shell_w
 obj.data.transform(Matrix.Scale(s, 4))
 vs = [v.co for v in obj.data.vertices]
