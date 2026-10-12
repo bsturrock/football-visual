@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/BufferGeometryUtils.js';
-import { prep, PLAYER_MATERIAL, createPlayerRig, bakeRig } from './PlayerModel.js';
-import { Retargeter, kitColors } from './ModelLibrary.js';
+import { prep, PLAYER_MATERIAL, createPlayerRig, bakeRig, disposeRig } from './PlayerModel.js';
+import { resolveBody } from './Body.js';
+import { resolveKit } from './Uniforms.js';
 import { FIELD, SKIN_TONES } from './constants.js';
 
 // ---------------------------------------------------------------------------
@@ -251,30 +252,21 @@ export function buildBenchPlayers(engine) {
   const rand = (a, b) => a + Math.random() * (b - a);
   for (const key of ['home', 'away']) {
     const t = engine.teams[key];
-    const specs = [['line', 'line'], ['skill', 'skill'], ['big', 'line'], ['skill', 'skill'], ['qb', 'qb']];
-    const variants = specs.map(([build, kit], i) => {
+    const kit = resolveKit(t);
+    const positions = ['OL', 'WR', 'LB', 'RB', 'QB', 'DL'];
+    const variants = positions.map((position, i) => {
       const skin = SKIN_TONES[(i * 2 + (key === 'home' ? 1 : 3)) % SKIN_TONES.length];
-      const rig = createPlayerRig({ team: t, build, skin });
+      const rig = createPlayerRig({ body: resolveBody({ seed: 1000 + i * 17 + (key === 'home' ? 0 : 7), position }), kit, skin });
       const b = rig.bones;
-      const pose = () => {
-        b.shL.rotation.set(0.05, 0, 0.18); b.shR.rotation.set(0.05, 0, -0.18); b.elL.rotation.x = -0.3; b.elR.rotation.x = -0.3;
-        if (i % 2) { b.shL.rotation.z = 0.7; b.elL.rotation.x = -1.6; b.elL.rotation.y = 0.8; b.shR.rotation.z = -0.7; b.elR.rotation.x = -1.6; b.elR.rotation.y = -0.8; }
-        b.hipL.rotation.z = 0.07; b.hipR.rotation.z = -0.07; b.ankL.rotation.z = -0.07; b.ankR.rotation.z = 0.07;
-      };
-      if (engine.models) {
-        const inst = engine.models.instantiate(build === 'line' || build === 'big' ? 'line' : 'skill', kitColors(t, kit, skin));
-        const rt = new Retargeter(rig, inst, { line: 2.16, big: 2.08, skill: 2.0, qb: 2.04 }[build], build === 'big' ? 0.9 : 1);
-        pose();
-        const geo = rt.bake();
-        return { geo, mat: inst.mesh.material };
-      }
-      pose();
+      b.shL.rotation.set(0.05, 0, 0.18); b.shR.rotation.set(0.05, 0, -0.18); b.elL.rotation.x = -0.3; b.elR.rotation.x = -0.3;
+      if (i % 2) { b.shL.rotation.z = 0.7; b.elL.rotation.x = -1.6; b.elL.rotation.y = 0.8; b.shR.rotation.z = -0.7; b.elR.rotation.x = -1.6; b.elR.rotation.y = -0.8; }
+      b.hipL.rotation.z = 0.07; b.hipR.rotation.z = -0.07; b.ankL.rotation.z = -0.07; b.ankR.rotation.z = 0.07;
       const geo = bakeRig(rig);
-      rig.meshes.forEach(m => m.geometry.dispose());
+      disposeRig(rig);
       return { geo, mat: PLAYER_MATERIAL };
     });
     const [x0, x1] = SIDE_X[key];
-    const perVariant = 6;
+    const perVariant = 5;
     variants.forEach(({ geo, mat }, vi) => {
       const im = new THREE.InstancedMesh(geo, mat, perVariant);
       for (let i = 0; i < perVariant; i++) {

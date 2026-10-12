@@ -11,40 +11,20 @@ Tackles, catches and blocking must be **physics-driven**, not canned animations.
 
 ## Current state
 - Engine: `src/engine/*`. See README for the API and events. The demo driver is `src/demo/DemoSim.js`; it is replaceable.
-- Players: ultra-low-poly textured GLB models (`assets/big.glb` for line builds, `assets/small.glb` for skill builds), loaded by
-  `ModelLibrary.js`. The painted texture is recoloured per team/skin (texels classed blue/white/skin/dark → kit colour); one draw call per player.
-  The older region-material models (`assets/lineman_styl.glb`, `assets/wr_styl.glb`) still load through the same API.
-- Animation: the procedural animator drives an invisible proxy skeleton (`PlayerModel.js`).
-  `Retargeter` copies its world rotations onto the Mixamo bones (bind offsets are computed
-  by aiming proxy limbs along the model's T-pose segments).
-- Builds: OL/DL/TE/LB use the lineman model (TE/LB narrower). WR/RB/CB/S use the WR model. QB uses the WR model with the `qb` kit.
-  Each player has random height and width multipliers.
-- `?procedural` in the URL uses the old code-built players (fallback). `?nosim` shows an empty field.
-
-## Model pipeline (current: Meshy low-poly → cleanup → Meshy auto-rig)
-1. Meshy low-poly generation (T-pose, ~700–1200 tris, kit painted in blue/white/skin/dark).
-2. `python3 tools/blender/prep_for_rig.py -- assets/source/<name>.glb assets/source/<name>-prepped --height 1.93`
-   (welds seams, flat shading, base-colour texture only, feet at origin, real scale).
-3. Rig `<name>-prepped.glb` with Meshy's auto-rigger (no remesh). It outputs Mixamo bone names, so it drops straight into `assets/`.
-
-## Old model pipeline (Meshy → Mixamo → Blender stylize)
-1. Meshy: T-pose, triangles, about 3–5k triangles, solid region colours, GLB/FBX.
-2. Mixamo auto-rig, no fingers, T-pose FBX with skin. Then a rigged GLB.
-3. `pip install bpy==4.2.0`, then
-   `python3 tools/blender/stylize.py assets/source/<name>-rigged.glb assets/<name>_styl.glb --kit line|skill|qb`.
-   The script cuts clean colour bands on the limbs, makes a geometric stripe, resolves the facemask and face opening by geometry,
-   and assigns matte named materials. Originals are kept in `assets/source/`.
-4. Preview: `glbview.html?f=assets/<name>_styl.glb&styl=1` (add `&cam=head&zoom=0.55` for a head close-up).
+- Players are **generated in code** (no model files): `Body.js` resolves height/weight/archetype/seed into proportions,
+  `PlayerModel.js` builds the boxy player (target: `docs/reference/target-model.png`) on the animation joints,
+  `Uniforms.js` gives home/away/alt colours. Numbers and names are per-player canvas decals. See `plan.md`.
+- Animation: procedural and physics-driven (`Animator.js`), rigid box segments per joint; foot planting uses each rig's leg lengths.
+- `lineup.html` is the player preview / validation page. `?nosim` shows an empty field.
+- The Meshy/Blender pipeline was removed (it's in git history before the "procedural players" commit).
 
 ## Known issues / next steps
-1. Stadium lighting pass to match the studio-matte look (flatter than the reference at distance).
-2. Retune stance and arm angles in `Animator.js` for the new model proportions (arms hang slightly
-   wide, stances a bit stiff vs reference images 1/2/4).
-3. Midfield logo is a rough placeholder (`Field.js` WOLF_OUTLINE). Real team logos (PNG/SVG) are wanted.
-4. Minor model leftovers: WR facemask brim clip, lineman brow triangles, stripe narrows at hip.
-5. Optional: referee and coach models (same Meshy → Mixamo → stylize pipeline).
-6. Optional: GitHub Pages deploy workflow; Git LFS for `.glb` files.
-7. Linebacker model was dropped (poor generation). Two base builds plus size variation cover all positions.
+1. Hand-tuned animations for specific moves on top of the procedural base (stances, tackles, catches, throws).
+2. Equipment variety (facemask styles, visors, sleeves) and uniform details (sleeve numbers, helmet logos, fonts).
+3. Automated validation script for generated bodies (height, ground contact, symmetry, helmet size).
+4. Stadium lighting pass to match the studio-matte look (flatter than the reference at distance).
+5. Midfield logo is a rough placeholder (`Field.js` WOLF_OUTLINE). Real team logos (PNG/SVG) are wanted.
+6. Optional: referee and coach figures built the same way as players.
 
 ## Environment notes
 - SSH to GitHub is blocked from the sandbox. Use session-level GitHub authorization to push.

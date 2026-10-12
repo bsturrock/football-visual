@@ -6,8 +6,6 @@ import { Player } from './Player.js';
 import { Ball } from './Ball.js';
 import { Physics } from './Physics.js';
 import { HUD } from './HUD.js';
-import { ModelLibrary } from './ModelLibrary.js';
-import { buildBenchPlayers } from './Stadium.js';
 
 export const DEFAULT_TEAMS = {
   home: { name: 'Riverdale', primary: '#1f56d8', secondary: '#173f9e', hud: '#2a62e0', hudDark: '#1a49c4', endzone: '#1d4fc4', helmet: '#f2f3f6', facemask: '#f2f3f6', pants: '#f4f6f9', logoBase: '#4b6fae' },
@@ -84,19 +82,6 @@ export class FootballEngine {
     if (opts.autoStart !== false) this.start();
   }
 
-  /**
-   * Load the stylized GLB player models. Call (and await) before adding players.
-   * urls: { line: 'assets/big.glb', skill: 'assets/small.glb' }
-   */
-  async loadModels(urls = { line: 'assets/big.glb', skill: 'assets/small.glb' }) {
-    this.models = await new ModelLibrary().load(urls);
-    // rebuild the sideline players from the new models
-    const old = this.scene.getObjectByName('benchPlayers');
-    if (old) old.parent.remove(old);
-    this.scene.add(buildBenchPlayers(this));
-    return this.models;
-  }
-
   // ---------------------------------------------------------------- players
   addPlayer(o) {
     const p = new Player(this, { ...o, teamData: this.teams[o.team] });
@@ -153,7 +138,6 @@ export class FootballEngine {
     if (this.onUpdate) this.onUpdate(dt);
     for (const p of this.players) { p.anim.update(dt); p.syncVisual(); }
     this.scene.updateMatrixWorld();
-    for (const p of this.players) if (p.visual) p.visual.update();
     this.ball.sync();
     this.cam.update(realDt);
     if (this._crowdTime) this._crowdTime.value += realDt;

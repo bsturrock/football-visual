@@ -1,8 +1,10 @@
 import * as THREE from 'three';
 import { createPlayerRig, disposeRig } from './PlayerModel.js';
-import { Retargeter, kitColors } from './ModelLibrary.js';
+import { resolveBody, rng } from './Body.js';
+import { resolveKit } from './Uniforms.js';
 import { Animator } from './Animator.js';
-import { FIELD, PROFILES, BUILDS, GRAVITY, SKIN_TONES } from './constants.js';
+import { FIELD, PROFILES, GRAVITY, SKIN_TONES } from './constants.js';
+import { placeholderName } from './names.js';
 
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 const angDiff = (a, b) => Math.atan2(Math.sin(b - a), Math.cos(b - a));
@@ -31,20 +33,22 @@ export class Player {
     this.teamData = o.teamData;
     this.number = o.number ?? 0;
     this.position = o.position || 'WR';
-    this.name = o.name || `${this.position}${this.number}`;
+    // body: from the sim's height/weight (rolled from the position if missing).
+    // `body` can also be a previously resolved body to rebuild a player exactly.
+    this.body = o.body?.p ? o.body : resolveBody({
+      seed: o.seed, position: this.position, heightIn: o.heightIn, weightLb: o.weightLb,
+      archetype: o.archetype, overrides: o.body,
+    });
+    const rand = rng(this.body.seed ^ 0x5bd1e995);
+    this.name = o.name || placeholderName(rand);
     const prof = { ...PROFILES[this.position], ...(o.ratings || {}) };
     this.r = prof;
-    this.build = o.build || prof.build;
-    const B = BUILDS[this.build];
-    // individual body size: same proportions/kit, different frames
-    this.heightMul = o.heightMul ?? (0.95 + Math.random() * 0.09);
-    this.widthMul = o.widthMul ?? (0.92 + Math.random() * 0.16);
 
     // --- physical body -------------------------------------------------------
-    this.mass = prof.mass;
-    this.radius = B.radius * (0.9 + 0.1 * this.widthMul);
+    this.mass = o.ratings?.mass ?? this.body.weightLb * 0.4536;
+    this.radius = 0.3 + 0.12 * clamp((this.body.weightLb - 180) / 150, 0, 1);
     this.maxSpeed = prof.speed;
-    this.maxForce = prof.mass * (6.5 + 2.5 * prof.agility) * (0.75 + 0.25 * prof.strength);
+    this.maxForce = this.mass * (6.5 + 2.5 * prof.agility) * (0.75 + 0.25 * prof.strength);
     this.turnRate = 6 + 5 * prof.agility;
     this.pos = new THREE.Vector2(o.x || 0, o.z || 0);
     this.vel = new THREE.Vector2();
@@ -88,26 +92,11 @@ export class Player {
     this.catchCooldown = 0;
     this.userData = {};               // free for your sim
 
-    this._skin = o.skin || SKIN_TONES[(Math.random() * SKIN_TONES.length) | 0];
-    this.rig = createPlayerRig({
-      team: o.teamData, build: this.build,
-      skin: this._skin,
-      heightMul: this.heightMul, widthMul: this.widthMul,
-    });
+    this._skin = o.skin || SKIN_TONES[(rand() * SKIN_TONES.length) | 0];
+    this.kit = resolveKit(o.teamData, o.uniform);
+    this.rig = createPlayerRig({ body: this.body, kit: this.kit, skin: this._skin, number: this.number, name: this.name });
     this.rig.root.userData.player = this;
     engine.scene.add(this.rig.root);
-    // Stylized GLB model (if loaded): the code-built rig becomes an invisible proxy skeleton
-    this.visual = null;
-    if (engine.models) {
-      const kit = ({ OL: 'line', DL: 'line', TE: 'line', LB: 'line', QB: 'qb', K: 'qb' })[this.position] || 'skill';
-      const modelKey = (this.build === 'line' || this.build === 'big') ? 'line' : 'skill';
-      const H = { line: 2.16, big: 2.08, skill: 2.0, qb: 2.04 }[this.build] * this.heightMul;
-      const wMul = (this.build === 'big' ? 0.9 : 1) * this.widthMul;
-      for (const m of this.rig.meshes) { m.parent.remove(m); m.geometry.dispose(); }
-      this.rig.meshes = [];
-      const inst = engine.models.instantiate(modelKey, kitColors(o.teamData, kit, this._skin));
-      this.visual = new Retargeter(this.rig, inst, H, wMul);
-    }
     this.anim = new Animator(this);
     this.syncVisual();
   }
@@ -597,7 +586,6 @@ export class Player {
 
   /** World position of a hand (after animation). */
   handWorld(side = 'R', out = new THREE.Vector3()) {
-    if (this.visual) return this.visual.inst.bones[side === 'R' ? 'RightHand' : 'LeftHand'].getWorldPosition(out);
     return this.rig.bones['hand' + side].getWorldPosition(out);
   }
 

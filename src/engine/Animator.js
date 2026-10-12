@@ -107,9 +107,10 @@ export class Animator {
     b.pelvis.rotation.z += (T.pelvis.z - b.pelvis.rotation.z) * k;
 
     // ---- solve pelvis height so the planted foot touches the ground --------
+    const L = p.rig.leg || LEG;
     const legH = (hip, kn) => {
       const a = hip.rotation.x, c = Math.cos(hip.rotation.z);
-      return (-LEG.HIP_Y) + (LEG.THIGH * Math.cos(a) + LEG.SHIN * Math.cos(a + kn.rotation.x)) * c + LEG.FOOT_H;
+      return (-L.HIP_Y) + (L.THIGH * Math.cos(a) + L.SHIN * Math.cos(a + kn.rotation.x)) * c + L.FOOT_H;
     };
     const hL = legH(b.hipL, b.knL), hR = legH(b.hipR, b.knR);
     const targetY = Math.max(hL, hR) + T.pelvis.x; // T.pelvis.x used as additive vertical offset

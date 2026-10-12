@@ -8,7 +8,7 @@ Any static server works (ES modules + import map, Three.js is bundled in `vendor
 python3 -m http.server 8000   →  http://localhost:8000/
 ```
 * `?nosim` starts the engine with no demo driver (an empty field for your sim).
-* `model.html?b=line,big,qb,skill&mix=1` is a model preview / lookdev page.
+* `lineup.html` previews generated players: the six test bodies, same-size seed variation, or a custom player with sliders. It runs the real animator (`pose=run|sprint|3pt|block|…`, `uniform=home|away|alt`, `cam=front|side|back|3q`).
 * Keys: `1-4` camera modes, `Space` pause, `[` `]` slow-mo.
 
 ## Layout
@@ -18,12 +18,15 @@ src/engine/
   Player.js       per-player body + brain (intents) + command API
   Physics.js      collisions, momentum impulses, hit reactions, wrap-ups/grips, trips, fumbles
   Animator.js     procedural, physics-driven animation (no canned clips)
-  PlayerModel.js  low-poly rig built in code (one shared vertex-colour material), bakeRig()
+  Body.js         height/weight/archetype/seed → body proportions (deterministic)
+  PlayerModel.js  boxy player built in code from a body + uniform, numbers/names, bakeRig()
+  Uniforms.js     home / away / alt uniform colour sets per team
+  names.js        placeholder surnames
   Ball.js         ballistic flight, led passes w/ accuracy error, snaps, prolate bounces
   Field.js        canvas-drawn field (numbers, hashes, logo, end zones), goalposts
   Stadium.js      two-tier bowl, ~25k GPU-animated fans, benches with baked players
   HUD.js          broadcast scorebug matching the reference
-  constants.js    units (1 unit = 1 yard), position profiles, body builds
+  constants.js    units (1 unit = 1 yard), position rating profiles, skin tones
 ```
 
 ## Coordinates
@@ -32,8 +35,10 @@ Units are yards. X runs along the field (goal lines at ±50, end lines at ±60).
 ## Driving players (your sim → engine)
 ```js
 const e = new FootballEngine(el, { teams: { home: {...}, away: {...} } });
-const qb = e.addPlayer({ team:'home', position:'QB', number:7, ratings:{ accuracy:.9, arm:.8 },
-                         heightMul:1.02, widthMul:0.97 });   // optional: random by default
+const qb = e.addPlayer({ team:'home', position:'QB', number:7, name:'Jordan',
+                         seed:17429, heightIn:76, weightLb:225,     // body from the sim (rolled from position if omitted)
+                         uniform:'home',                            // 'home' | 'away' | 'alt' (default team.uniform || 'home')
+                         ratings:{ accuracy:.9, arm:.8 } });
 qb.teleport(x, z, facing);         qb.stance('qb', facing)    // '3pt' | 'center' | '2pt' | 'wr' | 'lb' | 'qb'
 p.moveTo(x, z, {speed, face})      p.runRoute([[x,z],...], {settle})
 p.block({target, protect, drive:[dx,dz], zone:[x,z], radius})   // pass pro or run block (auto-picks rushers)
@@ -59,5 +64,15 @@ By default (`autoDeadBall: true`), the engine whistles a play dead on a knee-dow
 * **Trips**: upright players running over bodies on the ground can stumble or fall.
 * **Animation** is generated from physical state: stride-locked run cycles, lean into acceleration, shuffle/backpedal, stances, throw, block, brace, falls, and getting up.
 
-## Player sizes
-Four builds (`line`, `big`, `skill`, `qb`), plus per-player `heightMul` / `widthMul` variation. All share the same proportions and equipment. The collision radius scales with the frame.
+## Player bodies
+Players are generated, not loaded. `Body.resolveBody({ seed, position, heightIn, weightLb, archetype, overrides })` turns the sim's height/weight into 16 normalised proportions (1.0 = the 6'1", 225 lb reference):
+* **Height** lengthens legs more than the torso; the helmet barely changes size.
+* **Weight** is not a uniform scale: each region (shoulders, chest, waist, belly, hips, arms, legs) responds to mass with its own rate.
+* **Archetypes** (`compact`, `lean_athletic`, `balanced_athletic`, `strong_athletic`, `power`, `massive`) bias regions and supply typical sizes; the position picks one by default.
+* **Seed** adds correlated variation (top-heavy vs leg-heavy, thick vs lean core, long legs vs long torso), so same-size players still look different.
+* The resolved body is a plain object on `player.body`. Pass it back as `body` to rebuild the same player exactly.
+
+Mass comes from weight (override with `ratings.mass`); the collision radius grows with weight.
+
+## Uniforms
+Each team can define `uniforms: { home, away, alt }` with any region colours (`jersey, trim, number, numberOutline, pants, pantStripe, socks, sockBand, helmet, helmetStripe, mask, gloves, cleats, cleatTrim`). Missing colours are derived from `primary` / `secondary`. `team.uniform` sets what the team wears; `addPlayer({ uniform })` overrides per player. Numbers (front and back) and the name on the back are drawn per player.
