@@ -6,8 +6,7 @@ Milestone 1: clean the medium base player and export it for Three.js.
 
 The source file is never modified. Steps:
   - weld UV-seam vertex splits into one connected mesh (needed for skinning later)
-  - fix the source: dark paint at the outer ends of the lower facemask -> white; dark panel behind
-    the visor -> skin (a face shows through); back of neck -> skin
+  - fix the source: dark paint at the outer ends of the lower facemask -> white; back of neck -> skin
   - exact left/right symmetry: keep the +X half and mirror it (MIRROR_KEEP=-1 keeps -X)
   - consistent outward normals, flat shading
   - matte material: base colour only (drop the metallic/roughness map), texture <= 1024 px
@@ -80,20 +79,12 @@ mask_dark = [f for f in bm.faces
 for f in mask_dark:
     for l in f.loops: l[uvl].uv = WHITE_UV
 
-# 2. face: behind the visor and the lower mask there is only a dark back panel. Paint the
-#    front-facing parts skin so a face reads through the openings (side walls stay dark = shadow).
-face = [f for f in bm.faces
-        if 0.64 <= f.calc_center_median().z <= 0.84 and abs(f.calc_center_median().x) <= 0.12
-        and f.calc_center_median().y > -0.16 and f.normal.y < -0.85 and colour(f) == 'dark']
-for f in face:
-    for l in f.loops: l[uvl].uv = SKIN_UV
-
-# 3. back of the neck: painted dark grey in the texture -> recolour as skin
+# 2. back of the neck: painted dark grey in the texture -> recolour as skin
 neck = [f for f in bm.faces if 0.45 < f.calc_center_median().z < 0.64 and f.calc_center_median().y > -0.02
         and abs(f.calc_center_median().x) < 0.16 and colour(f) == 'dark']
 for f in neck:
     for l in f.loops: l[uvl].uv = SKIN_UV
-# 4. symmetry: keep one half (MIRROR_KEEP = +1 keeps +X, the player's left) and mirror it
+# 3. symmetry: keep one half (MIRROR_KEEP = +1 keeps +X, the player's left) and mirror it
 KEEP = int(os.environ.get('MIRROR_KEEP', '1'))
 bmesh.ops.bisect_plane(bm, geom=bm.verts[:] + bm.edges[:] + bm.faces[:], dist=1e-5,
                        plane_co=(0, 0, 0), plane_no=(1, 0, 0), clear_inner=(KEEP > 0), clear_outer=(KEEP < 0))
@@ -103,7 +94,7 @@ bmesh.ops.mirror(bm, geom=bm.verts[:] + bm.edges[:] + bm.faces[:], matrix=Matrix
 bmesh.ops.remove_doubles(bm, verts=bm.verts, dist=1e-4)
 bmesh.ops.triangulate(bm, faces=[f for f in bm.faces if len(f.verts) > 3])
 print(f'symmetry: kept {"+X" if KEEP > 0 else "-X"} half, mirrored')
-print(f'fixes: facemask dark faces -> white {len(mask_dark)}; face panel -> skin {len(face)}; neck faces recoloured {len(neck)}')
+print(f'fixes: facemask dark faces -> white {len(mask_dark)}; neck faces recoloured {len(neck)}')
 bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
 for f in bm.faces:
     f.smooth = False
