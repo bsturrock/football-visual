@@ -10,3 +10,4 @@ analysis/renders/*_threequarter.png
 analysis/renders/*_top.png
 analysis/renders/provisional_fit_full.png
 analysis/renders/provisional_fit_head_*.png
+__pycache__/
